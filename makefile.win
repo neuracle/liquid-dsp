@@ -1,0 +1,87 @@
+
+CC=icl
+Link_Exe=xilink
+Target=liquid-dsp.dll
+
+Debug_Path=Debug
+Release_Path=Release
+Debug_Target=$(Debug_Path)\\$(Target)
+Release_Target=$(Release_Path)\\$(Target)
+
+
+filter_objects =\
+	src\filter\src\bessel.obj\
+	src\filter\src\butter.obj\
+	src\filter\src\cheby1.obj\
+	src\filter\src\cheby2.obj\
+	src\filter\src\ellip.obj\
+	src\filter\src\filter_rrrf.obj\
+	src\filter\src\filter_crcf.obj\
+	src\filter\src\filter_cccf.obj\
+	src\filter\src\firdes.obj\
+	src\filter\src\firdespm.obj\
+	src\filter\src\fnyquist.obj\
+	src\filter\src\gmsk.obj\
+	src\filter\src\group_delay.obj\
+	src\filter\src\hM3.obj\
+	src\filter\src\iirdes.pll.obj\
+	src\filter\src\iirdes.obj\
+	src\filter\src\lpc.obj\
+	src\filter\src\rcos.obj\
+	src\filter\src\rkaiser.obj\
+	src\filter\src\rrcos.obj
+
+filter_sources =\
+	src\filter\src\bessel.c	\
+	src\filter\src\butter.c	\
+	src\filter\src\cheby1.c	\
+	src\filter\src\cheby2.c	\
+	src\filter\src\ellip.c	\
+	src\filter\src\filter_rrrf.c\
+	src\filter\src\filter_crcf.c\
+	src\filter\src\filter_cccf.c\
+	src\filter\src\firdes.c	\
+	src\filter\src\firdespm.c\
+	src\filter\src\fnyquist.c\
+	src\filter\src\gmsk.c	\
+	src\filter\src\group_delay.c\
+	src\filter\src\hM3.c	\
+	src\filter\src\iirdes.pll.c\
+	src\filter\src\iirdes.c	\
+	src\filter\src\lpc.c	\
+	src\filter\src\rcos.c	\
+	src\filter\src\rkaiser.c\
+	src\filter\src\rrcos.c
+
+Debub_Objs= $(filter_objects)
+
+Release_Objs= $(filter_objects)
+
+Sources=$(filter_sources)
+
+Includes = -I.\include -I.
+CFLAGS =/Qstd=c99 /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_USRDLL" /D "LIQUIDDSP_EXPORTS" /D "_WINDLL" /D "_UNICODE" /D "UNICODE" /D "_USE_MATH_DEFINES" /D "__PURE_SYS_C99_HEADERS__" /D "_COMPLEX_DEFINED" /c
+
+$(filter_objects):$(filter_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\filter\src\\" $(filter_sources)
+
+$(Release_Objs): $(Sources)
+	$(CC)   $(Includes) $(CFLAGS)  $(Sources)
+
+$(Debug_Target):$(filter_objects)
+	xilink  /dll -out:$(Debug_Target)  $(filter_objects)
+
+$(Release_Target):$(Release_Objs)
+	xilink -out:$(Release_Target) /dll  $(filter_objects)
+
+
+all:$(Debug_Target) $(Release_Target)
+
+
+clean:
+   del $(filter_objects)
+   del $(Debug_Target)
+
+debug:$(Debug_Target)
+
+release:$(Release_Target)
