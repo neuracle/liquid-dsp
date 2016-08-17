@@ -8,6 +8,351 @@ Release_Path=Release
 Debug_Target=$(Debug_Path)\\$(Target)
 Release_Target=$(Release_Path)\\$(Target)
 
+agc_objects =	\
+	src\\agc\\src\\agc_crcf.obj\
+	src\\agc\\src\\agc_rrrf.obj
+
+agc_sources =	\
+	src\\agc\\src\\agc_crcf.c\
+	src\\agc\\src\\agc_rrrf.c\
+
+audio_objects =\
+	src\\audio\\src\\cvsd.obj
+
+audio_sources =\
+	src\\audio\\src\\cvsd.c
+
+buffer_objects =\
+	src\\buffer\\src\\bufferf.obj\
+	src\\buffer\\src\\buffercf.obj\
+
+buffer_sources =\
+	src\\buffer\\src\\bufferf.c\
+	src\\buffer\\src\\buffercf.c
+
+channel_objects =\
+	src\\channel\\src\\channel_cccf.obj
+
+channel_sources =\
+	src\\channel\\src\\channel_cccf.c
+
+dotprod_objects =\
+	src\\dotprod\\src\\dotprod_cccf.obj\
+	src\\dotprod\\src\\dotprod_crcf.obj\
+	src\\dotprod\\src\\dotprod_rrrf.obj\
+	src\\dotprod\\src\\sumsq.obj
+
+dotprod_sources =\
+	src\\dotprod\\src\\dotprod_cccf.c\
+	src\\dotprod\\src\\dotprod_crcf.c\
+	src\\dotprod\\src\\dotprod_rrrf.c\
+	src\\dotprod\\src\\sumsq.c
+
+equalization_objects =\
+	src\\equalization\\src\\equalizer_cccf.obj\
+	src\\equalization\\src\\equalizer_rrrf.obj\
+
+equalization_sources =\
+	src\\equalization\\src\\equalizer_cccf.c\
+	src\\equalization\\src\\equalizer_rrrf.c
+
+fec_objects =	\
+	src\\fec\\src\\crc.obj\
+	src\\fec\\src\\fec.obj\
+	src\\fec\\src\\fec_conv.obj\
+	src\\fec\\src\\fec_conv_poly.obj\
+	src\\fec\\src\\fec_conv_pmatrix.obj\
+	src\\fec\\src\\fec_conv_punctured.obj\
+	src\\fec\\src\\fec_golay2412.obj\
+	src\\fec\\src\\fec_hamming74.obj\
+	src\\fec\\src\\fec_hamming84.obj\
+	src\\fec\\src\\fec_hamming128.obj\
+	src\\fec\\src\\fec_hamming1511.obj\
+	src\\fec\\src\\fec_hamming3126.obj\
+	src\\fec\\src\\fec_hamming128_gentab.obj\
+	src\\fec\\src\\fec_pass.obj\
+	src\\fec\\src\\fec_rep3.obj\
+	src\\fec\\src\\fec_rep5.obj\
+	src\\fec\\src\\fec_rs.obj\
+	src\\fec\\src\\fec_secded2216.obj\
+	src\\fec\\src\\fec_secded3932.obj\
+	src\\fec\\src\\fec_secded7264.obj\
+	src\\fec\\src\\interleaver.obj\
+	src\\fec\\src\\packetizer.obj\
+	src\\fec\\src\\sumproduct.obj
+
+fec_sources =	\
+	src\\fec\\src\\crc.c\
+	src\\fec\\src\\fec.c\
+	src\\fec\\src\\fec_conv.c\
+	src\\fec\\src\\fec_conv_poly.c\
+	src\\fec\\src\\fec_conv_pmatrix.c\
+	src\\fec\\src\\fec_conv_punctured.c\
+	src\\fec\\src\\fec_golay2412.c\
+	src\\fec\\src\\fec_hamming74.c\
+	src\\fec\\src\\fec_hamming84.c\
+	src\\fec\\src\\fec_hamming128.c\
+	src\\fec\\src\\fec_hamming1511.c\
+	src\\fec\\src\\fec_hamming3126.c\
+	src\\fec\\src\\fec_hamming128_gentab.c\
+	src\\fec\\src\\fec_pass.c\
+	src\\fec\\src\\fec_rep3.c\
+	src\\fec\\src\\fec_rep5.c\
+	src\\fec\\src\\fec_rs.c\
+	src\\fec\\src\\fec_secded2216.c\
+	src\\fec\\src\\fec_secded3932.c\
+	src\\fec\\src\\fec_secded7264.c\
+	src\\fec\\src\\interleaver.c\
+	src\\fec\\src\\packetizer.c\
+	src\\fec\\src\\sumproduct.c
+
+fft_objects =	\
+	src\\fft\\src\\fftf.obj\
+	src\\fft\\src\\spgramcf.obj\
+	src\\fft\\src\\spgramf.obj\
+	src\\fft\\src\\fft_utilities.obj
+
+fft_sources =	\
+	src\\fft\\src\\fftf.c\
+	src\\fft\\src\\spgramcf.c\
+	src\\fft\\src\\spgramf.c\
+	src\\fft\\src\\fft_utilities.c
+
+framing_objects =\
+	src\\framing\\src\\bpacketgen.obj\
+	src\\framing\\src\\bpacketsync.obj\
+	src\\framing\\src\\bpresync_cccf.obj\
+	src\\framing\\src\\bsync_rrrf.obj\
+	src\\framing\\src\\bsync_crcf.obj\
+	src\\framing\\src\\bsync_cccf.obj\
+	src\\framing\\src\\detector_cccf.obj\
+	src\\framing\\src\\framedatastats.obj\
+	src\\framing\\src\\framesyncstats.obj\
+	src\\framing\\src\\framegen64.obj\
+	src\\framing\\src\\framesync64.obj\
+	src\\framing\\src\\flexframegen.obj\
+	src\\framing\\src\\flexframesync.obj\
+	src\\framing\\src\\gmskframegen.obj\
+	src\\framing\\src\\gmskframesync.obj\
+	src\\framing\\src\\msourcecf.obj\
+	src\\framing\\src\\ofdmflexframegen.obj\
+	src\\framing\\src\\ofdmflexframesync.obj\
+	src\\framing\\src\\presync_cccf.obj\
+	src\\framing\\src\\symstreamcf.obj\
+	src\\framing\\src\\symtrack_cccf.obj\
+	src\\framing\\src\\qdetector_cccf.obj\
+	src\\framing\\src\\qpacketmodem.obj\
+	src\\framing\\src\\qpilotgen.obj\
+	src\\framing\\src\\qpilotsync.obj
+
+framing_sources =\
+	src\\framing\\src\\bpacketgen.c\
+	src\\framing\\src\\bpacketsync.c\
+	src\\framing\\src\\bpresync_cccf.c\
+	src\\framing\\src\\bsync_rrrf.c\
+	src\\framing\\src\\bsync_crcf.c\
+	src\\framing\\src\\bsync_cccf.c\
+	src\\framing\\src\\detector_cccf.c\
+	src\\framing\\src\\framedatastats.c\
+	src\\framing\\src\\framesyncstats.c\
+	src\\framing\\src\\framegen64.c\
+	src\\framing\\src\\framesync64.c\
+	src\\framing\\src\\flexframegen.c\
+	src\\framing\\src\\flexframesync.c\
+	src\\framing\\src\\gmskframegen.c\
+	src\\framing\\src\\gmskframesync.c\
+	src\\framing\\src\\msourcecf.c\
+	src\\framing\\src\\ofdmflexframegen.c\
+	src\\framing\\src\\ofdmflexframesync.c\
+	src\\framing\\src\\presync_cccf.c\
+	src\\framing\\src\\symstreamcf.c\
+	src\\framing\\src\\symtrack_cccf.c\
+	src\\framing\\src\\qdetector_cccf.c\
+	src\\framing\\src\\qpacketmodem.c\
+	src\\framing\\src\\qpilotgen.c\
+	src\\framing\\src\\qpilotsync.c
+
+math_objects =	\
+	src\\math\\src\\poly.obj\
+	src\\math\\src\\polyc.obj\
+	src\\math\\src\\polyf.obj\
+	src\\math\\src\\polycf.obj\
+	src\\math\\src\\math.obj\
+	src\\math\\src\\math.bessel.obj\
+	src\\math\\src\\math.gamma.obj\
+	src\\math\\src\\math.complex.obj\
+	src\\math\\src\\math.trig.obj\
+	src\\math\\src\\modular_arithmetic.obj
+
+math_sources =	\
+	src\\math\\src\\poly.c\
+	src\\math\\src\\polyc.c\
+	src\\math\\src\\polyf.c\
+	src\\math\\src\\polycf.c\
+	src\\math\\src\\math.c\
+	src\\math\\src\\math.bessel.c\
+	src\\math\\src\\math.gamma.c\
+	src\\math\\src\\math.complex.c\
+	src\\math\\src\\math.trig.c\
+	src\\math\\src\\modular_arithmetic.c
+
+matrix_objects =\
+	src\\matrix\\src\\matrix.obj\
+	src\\matrix\\src\\matrixf.obj\
+	src\\matrix\\src\\matrixc.obj\
+	src\\matrix\\src\\matrixcf.obj\
+	src\\matrix\\src\\smatrix.common.obj\
+	src\\matrix\\src\\smatrixb.obj\
+	src\\matrix\\src\\smatrixf.obj\
+	src\\matrix\\src\\smatrixi.obj
+
+matrix_sources =\
+	src\\matrix\\src\\matrix.c\
+	src\\matrix\\src\\matrixf.c\
+	src\\matrix\\src\\matrixc.c\
+	src\\matrix\\src\\matrixcf.c\
+	src\\matrix\\src\\smatrix.common.c\
+	src\\matrix\\src\\smatrixb.c\
+	src\\matrix\\src\\smatrixf.c\
+	src\\matrix\\src\\smatrixi.c
+
+modem_objects =\
+	src\\modem\\src\\ampmodem.obj\
+	src\\modem\\src\\cpfskdem.obj\
+	src\\modem\\src\\cpfskmod.obj\
+	src\\modem\\src\\fskdem.obj\
+	src\\modem\\src\\fskmod.obj\
+	src\\modem\\src\\gmskdem.obj\
+	src\\modem\\src\\gmskmod.obj\
+	src\\modem\\src\\modemf.obj\
+	src\\modem\\src\\modem_utilities.obj\
+	src\\modem\\src\\modem_apsk_const.obj\
+	src\\modem\\src\\modem_arb_const.obj
+
+modem_sources =\
+	src\\modem\\src\\ampmodem.c\
+	src\\modem\\src\\cpfskdem.c\
+	src\\modem\\src\\cpfskmod.c\
+	src\\modem\\src\\fskdem.c\
+	src\\modem\\src\\fskmod.c\
+	src\\modem\\src\\gmskdem.c\
+	src\\modem\\src\\gmskmod.c\
+	src\\modem\\src\\modemf.c\
+	src\\modem\\src\\modem_utilities.c\
+	src\\modem\\src\\modem_apsk_const.c\
+	src\\modem\\src\\modem_arb_const.c
+
+multichannel_objects =\
+	src\\multichannel\\src\\firpfbch_crcf.obj\
+	src\\multichannel\\src\\firpfbch_cccf.obj\
+	src\\multichannel\\src\\ofdmframe.common.obj\
+	src\\multichannel\\src\\ofdmframegen.obj\
+	src\\multichannel\\src\\ofdmframesync.obj
+
+multichannel_sources =\
+	src\\multichannel\\src\\firpfbch_crcf.c\
+	src\\multichannel\\src\\firpfbch_cccf.c\
+	src\\multichannel\\src\\ofdmframe.common.c\
+	src\\multichannel\\src\\ofdmframegen.c\
+	src\\multichannel\\src\\ofdmframesync.c
+
+nco_objects =	\
+	src\\nco\\src\\nco_crcf.obj\
+	src\\nco\\src\\nco.utilities.obj
+
+nco_sources =	\
+	src\\nco\\src\\nco_crcf.c\
+	src\\nco\\src\\nco.utilities.c
+
+optim_objects =\
+	src\\optim\\src\\chromosome.obj\
+	src\\optim\\src\\gasearch.obj\
+	src\\optim\\src\\gradsearch.obj\
+	src\\optim\\src\\optim.common.obj\
+	src\\optim\\src\\qnsearch.obj\
+	src\\optim\\src\\utilities.obj
+
+optim_sources =\
+	src\\optim\\src\\chromosome.c\
+	src\\optim\\src\\gasearch.c\
+	src\\optim\\src\\gradsearch.c\
+	src\\optim\\src\\optim.common.c\
+	src\\optim\\src\\qnsearch.c\
+	src\\optim\\src\\utilities.c
+
+quantization_objects =\
+	src\\quantization\\src\\compand.obj\
+	src\\quantization\\src\\quantizercf.obj\
+	src\\quantization\\src\\quantizerf.obj\
+	src\\quantization\\src\\quantizer.inline.obj
+
+quantization_sources =\
+	src\\quantization\\src\\compand.c\
+	src\\quantization\\src\\quantizercf.c\
+	src\\quantization\\src\\quantizerf.c\
+	src\\quantization\\src\\quantizer.inline.c
+
+random_objects =\
+	src\\random\\src\\rand.obj\
+	src\\random\\src\\randn.obj\
+	src\\random\\src\\randexp.obj\
+	src\\random\\src\\randweib.obj\
+	src\\random\\src\\randgamma.obj\
+	src\\random\\src\\randnakm.obj\
+	src\\random\\src\\randricek.obj\
+	src\\random\\src\\scramble.obj
+
+random_sources =\
+	src\\random\\src\\rand.c\
+	src\\random\\src\\randn.c\
+	src\\random\\src\\randexp.c\
+	src\\random\\src\\randweib.c\
+	src\\random\\src\\randgamma.c\
+	src\\random\\src\\randnakm.c\
+	src\\random\\src\\randricek.c\
+	src\\random\\src\\scramble.c
+
+sequence_objects =\
+	src\\sequence\\src\\bsequence.obj\
+	src\\sequence\\src\\msequence.obj
+
+sequence_sources =\
+	src\\sequence\\src\\bsequence.c\
+	src\\sequence\\src\\msequence.c
+
+utility_objects =\
+	src\\utility\\src\\bshift_array.obj\
+	src\\utility\\src\\byte_utilities.obj\
+	src\\utility\\src\\msb_index.obj\
+	src\\utility\\src\\pack_bytes.obj\
+	src\\utility\\src\\shift_array.obj
+
+utility_sources =\
+	src\\utility\\src\\bshift_array.c\
+	src\\utility\\src\\byte_utilities.c\
+	src\\utility\\src\\msb_index.c\
+	src\\utility\\src\\pack_bytes.c\
+	src\\utility\\src\\shift_array.c
+
+vector_objects =\
+	src\\vector\\src\\vectorf_add.port.obj\
+	src\\vector\\src\\vectorf_norm.port.obj\
+	src\\vector\\src\\vectorf_mul.port.obj\
+	src\\vector\\src\\vectorf_trig.port.obj\
+	src\\vector\\src\\vectorcf_add.port.obj\
+	src\\vector\\src\\vectorcf_norm.port.obj\
+	src\\vector\\src\\vectorcf_mul.port.obj\
+	src\\vector\\src\\vectorcf_trig.port.obj
+
+vector_sources =\
+	src\\vector\\src\\vectorf_add.port.c\
+	src\\vector\\src\\vectorf_norm.port.c\
+	src\\vector\\src\\vectorf_mul.port.c\
+	src\\vector\\src\\vectorf_trig.port.c\
+	src\\vector\\src\\vectorcf_add.port.c\
+	src\\vector\\src\\vectorcf_norm.port.c\
+	src\\vector\\src\\vectorcf_mul.port.c\
+	src\\vector\\src\\vectorcf_trig.port.c
 
 filter_objects =\
 	src\filter\src\bessel.obj\
@@ -53,9 +398,52 @@ filter_sources =\
 	src\filter\src\rkaiser.c\
 	src\filter\src\rrcos.c
 
-Debub_Objs= $(filter_objects)
+Debug_Objs= src\\libliquid.obj\
+	$(agc_objects)\
+	$(audio_objects)	\
+	$(buffer_objects)	\
+	$(channel_objects)	\
+	$(dotprod_objects)	\
+	$(equalization_objects)	\
+	$(fec_objects)\
+	$(fft_objects)\
+	$(filter_objects)	\
+	$(framing_objects)	\
+	$(math_objects)\
+	$(matrix_objects)	\
+	$(modem_objects)	\
+	$(multichannel_objects)	\
+	$(nco_objects)\
+	$(optim_objects)	\
+	$(quantization_objects)	\
+	$(random_objects)	\
+	$(sequence_objects)	\
+	$(utility_objects)	\
+	$(vector_objects)
 
-Release_Objs= $(filter_objects)
+
+Release_Objs=  src\\libliquid.obj\
+	$(agc_objects)\
+	$(audio_objects)	\
+	$(buffer_objects)	\
+	$(channel_objects)	\
+	$(dotprod_objects)	\
+	$(equalization_objects)	\
+	$(fec_objects)\
+	$(fft_objects)\
+	$(filter_objects)	\
+	$(framing_objects)	\
+	$(math_objects)\
+	$(matrix_objects)	\
+	$(modem_objects)	\
+	$(multichannel_objects)	\
+	$(nco_objects)\
+	$(optim_objects)	\
+	$(quantization_objects)	\
+	$(random_objects)	\
+	$(sequence_objects)	\
+	$(utility_objects)	\
+	$(vector_objects)
 
 Sources=$(filter_sources)
 
@@ -65,22 +453,108 @@ CFLAGS =/Qstd=c99 /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_USRDLL" /D "LIQUIDDS
 $(filter_objects):$(filter_sources)
 	$(CC) $(Includes) $(CFLAGS) -Fo"src\\filter\src\\" $(filter_sources)
 
-$(Release_Objs): $(Sources)
-	$(CC)   $(Includes) $(CFLAGS)  $(Sources)
 
-$(Debug_Target):$(filter_objects)
-	xilink  /dll -out:$(Debug_Target)  $(filter_objects)
+src\\libliquid.obj:src\\libliquid.c
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\" src\\libliquid.c
+
+$(agc_objects):$(agc_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\agc\src\\" $(agc_sources)
+
+
+$(audio_objects):$(audio_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\audio\src\\" $(audio_sources)
+
+
+$(buffer_objects):$(buffer_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\buffer\src\\" $(buffer_sources)
+
+
+$(channel_objects):$(channel_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\channel\src\\" $(channel_sources)
+
+$(dotprod_objects):$(dotprod_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\dotprod\\src\\" $(dotprod_sources)
+
+$(equalization_objects):$(equalization_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\equalization\\src\\" $(equalization_sources)
+
+$(fec_objects):$(fec_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\fec\\src\\" $(fec_sources)
+
+$(fft_objects):$(fft_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\fft\\src\\" $(fft_sources)
+
+$(framing_objects):$(framing_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\framing\\src\\" $(framing_sources)
+
+$(math_objects):$(math_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\math\\src\\" $(math_sources)
+
+$(matrix_objects):$(matrix_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\matrix\\src\\" $(matrix_sources)
+
+$(modem_objects):$(modem_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\modem\\src\\" $(modem_sources)
+
+$(multichannel_objects):$(multichannel_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\multichannel\\src\\" $(multichannel_sources)
+
+$(nco_objects):$(nco_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\nco\\src\\" $(nco_sources)
+
+$(optim_objects):$(optim_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\optim\\src\\" $(optim_sources)
+
+$(quantization_objects):$(quantization_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\quantization\\src\\" $(quantization_sources)
+
+$(random_objects):$(random_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\random\\src\\" $(random_sources)
+
+$(sequence_objects):$(sequence_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\sequence\\src\\" $(sequence_sources)
+
+$(utility_objects):$(utility_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\utility\\src\\" $(utility_sources)
+
+$(vector_objects):$(vector_sources)
+	$(CC) $(Includes) $(CFLAGS) -Fo"src\\vector\\src\\" $(vector_sources)
+
+$(Debug_Target):$(Debug_Objs)
+	xilink  /dll /def:liquid-dsp.def -out:$(Debug_Target)  $(Debug_Objs)
 
 $(Release_Target):$(Release_Objs)
-	xilink -out:$(Release_Target) /dll  $(filter_objects)
+	xilink  /dll  /def:liquid-dsp.def -out:$(Release_Target) $(Release_Objs)
 
 
 all:$(Debug_Target) $(Release_Target)
 
 
 clean:
-   del $(filter_objects)
-   del $(Debug_Target)
+    del src\\libliquid.obj
+	del $(agc_objects)
+	del $(audio_objects)
+	del $(buffer_objects)
+	del $(channel_objects)
+	del $(dotprod_objects)
+	del $(equalization_objects)
+	del $(fec_objects)
+	del $(fft_objects)
+	del $(filter_objects)
+	del $(framing_objects)
+	del $(math_objects)
+	del $(matrix_objects)
+	del $(modem_objects)
+	del $(multichannel_objects)
+	del $(nco_objects)
+	del $(optim_objects)
+	del $(quantization_objects)
+	del $(random_objects)
+	del $(sequence_objects)
+	del $(utility_objects)
+	del $(vector_objects)
+	del $(Debug_Target)
+   del $(Release_Target)
 
 debug:$(Debug_Target)
 
