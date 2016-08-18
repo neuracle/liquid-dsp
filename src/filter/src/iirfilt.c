@@ -490,13 +490,15 @@ void IIRFILT(_execute_norm)(IIRFILT() _q,
                             TO *_y)
 {
     unsigned int i;
+    TI *v = _q->v;
+    int n = _q->n;
 
     // advance buffer
-	TI *v = _q->v;
-	int n = _q->n;
-	memcpy(v, v + 1, sizeof(TI)*( n - 1));
-    //for (i=n-1; i>0; i--)
-    //    v[i] = v[i-1];
+    for (i=n-1; i>0; i--){
+        v[i] = v[i-1];
+    }
+  //  memmove(v, v + 1, sizeof(TI)*( n - 2));
+
 
 #if LIQUID_IIRFILT_USE_DOTPROD
     // compute new v
@@ -510,16 +512,17 @@ void IIRFILT(_execute_norm)(IIRFILT() _q,
 #else
     // compute new v
     TI v0 = _x;
-	TC *a = _q->a;
-	int na = _q->na;
+    TC *a = _q->a;
+    int na = _q->na;
     for (i=1; i<na; i++)
         v0 -= a[i] * v[i];
+
     _q->v[0] = v0;
 
     // compute new y
     TO y0 = 0;
-	TC *b = _q->b;
-	int nb = _q->nb;
+    TC *b = _q->b;
+    int nb = _q->nb;
     for (i=0; i<nb; i++)
         y0 += b[i] * v[i];
 
