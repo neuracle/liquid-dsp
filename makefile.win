@@ -521,7 +521,7 @@ $(vector_objects):$(vector_sources)
 	$(CC) $(Includes) $(CFLAGS) -Fo"src\\vector\\src\\" $(vector_sources)
 
 $(Debug_Target):$(Debug_Objs)
-	xilink  /dll /def:liquid-dsp.def -out:$(Debug_Target)  $(Debug_Objs)
+	xilink  /dll /def:liquid-dsp.def /debug /pdb:$(Debug_Path)\liquid-dsp.pdb  -out:$(Debug_Target)  $(Debug_Objs)
 
 $(Release_Target):$(Release_Objs)
 	xilink  /dll  /def:liquid-dsp.def -out:$(Release_Target) $(Release_Objs)
