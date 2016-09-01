@@ -299,8 +299,6 @@ EXPORTS
 	dotprod_cccf_create
 	dotprod_cccf_destroy
 	dotprod_cccf_execute
-	dotprod_cccf_execute_mmx
-	dotprod_cccf_execute_mmx4
 	dotprod_cccf_print
 	dotprod_cccf_recreate
 	dotprod_cccf_run
@@ -308,8 +306,6 @@ EXPORTS
 	dotprod_crcf_create
 	dotprod_crcf_destroy
 	dotprod_crcf_execute
-	dotprod_crcf_execute_mmx
-	dotprod_crcf_execute_mmx4
 	dotprod_crcf_print
 	dotprod_crcf_recreate
 	dotprod_crcf_run
@@ -317,8 +313,6 @@ EXPORTS
 	dotprod_rrrf_create
 	dotprod_rrrf_destroy
 	dotprod_rrrf_execute
-	dotprod_rrrf_execute_mmx
-	dotprod_rrrf_execute_mmx4
 	dotprod_rrrf_print
 	dotprod_rrrf_recreate
 	dotprod_rrrf_run
