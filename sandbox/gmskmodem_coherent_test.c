@@ -62,16 +62,13 @@ int main(int argc, char*argv[])
     float complex x      [num_samples];     // transmitted signal
     float complex y      [num_samples];     // received signal
     float complex z      [num_samples];     // received signal
-    unsigned int  sym_out[num_symbols];     // output symbols
 
     // create modem objects
     gmskmod mod = gmskmod_create(k, m, beta);
 
     // generate message signal
-    for (i=0; i<num_symbols; i++) {
+    for (i=0; i<num_symbols; i++)
         sym_in[i] = rand() % 2;
-        sym_out[i] = 0;
-    }
 
     // modulate signal
     for (i=0; i<num_symbols; i++)
@@ -98,9 +95,7 @@ int main(int argc, char*argv[])
     // compute power spectral density of transmitted signal
     unsigned int nfft = 1024;
     float psd[nfft];
-    spgramcf periodogram = spgramcf_create_kaiser(nfft, nfft/2, 8.0f);
-    spgramcf_estimate_psd(periodogram, x, num_samples, psd);
-    spgramcf_destroy(periodogram);
+    spgramcf_estimate_psd(nfft, x, num_samples, psd);
 
     // 
     // export results

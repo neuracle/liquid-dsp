@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,101 +29,93 @@
 #include <string.h>
 #include <math.h>
 
-// forward declaration of internal single source object and methods
-typedef struct QSOURCE(_s) * QSOURCE();
-
-// internal structure (single source)
-struct QSOURCE(_s) {
-    int id; // unique id
-
-    union {
-        // tone
-        struct {
-            int x;
-        } tone;
-
-        // wide-band noise
-        struct {
-            IIRFILT() filter;
-        } noise;
-
-        // linear modulation
-        struct {
-            SYMSTREAM() symstream;
-        } linmod;
-    } source;
-    
-    enum {
-        QSOURCE_TONE,
-        QSOURCE_NOISE,
-        QSOURCE_MODEM,
-    } type;
-
-    nco_crcf mixer;
-    float    gain;
-    //int      enabled;
-};
-
-QSOURCE() QSOURCE(_create_tone)(int _id);
-
-QSOURCE() QSOURCE(_create_noise)(int _id, float _bandwidth);
-
-QSOURCE() QSOURCE(_create_modem)(int          _id,
-                                 int          _ms,
-                                 unsigned int _k,
-                                 unsigned int _m,
-                                 float        _beta);
-
-void QSOURCE(_destroy)(QSOURCE() _q);
-
-void QSOURCE(_print)(QSOURCE() _q);
-
-void QSOURCE(_reset)(QSOURCE() _q);
-
-void QSOURCE(_set_gain)(QSOURCE() _q,
-                        float     _gain_dB);
-
-void QSOURCE(_set_frequency)(QSOURCE() _q,
-                             float     _dphi);
-
-void QSOURCE(_gen_sample)(QSOURCE() _q,
-                          TO *      _v);
-
 // internal structure
 struct MSOURCE(_s)
 {
-    QSOURCE() *  sources;
-    unsigned int num_sources;
+    // internal sources
+    QSOURCE() *     sources;        // array of sources
+    unsigned int    num_sources;    // number of sources
+    int             id_counter;     // qsource id counter
 
-    int id_counter;
+    // channelizer description
+    unsigned int    M;              // channelizer size
+    unsigned int    m;              // channelizer filter semi-length
+    float           As;             // channelizer filter stop-band suppression (dB)
+    firpfbch2_crcf  ch;             // analysis channelizer object
+
+    // buffers
+    float complex * buf_freq;       // [size: M   x 1]
+    float complex * buf_time;       // [size: M/2 x 1]
+    unsigned int    read_index;     // output buffer read index
+    unsigned int    num_blocks;     // output buffer read index
+
+    // global counters
+    unsigned long long num_samples; // total number of samples generated
 };
 
 //
 // internal methods
 //
 
+// find index of qsource object by id within list, return -1 if not found
+int MSOURCE(_find)(MSOURCE() _q, int _id);
+
+// find qsource object by id within list, return NULL if not found
+QSOURCE() MSOURCE(_get_source)(MSOURCE() _q, int _id);
+
 // add source to list
 int MSOURCE(_add_source)(MSOURCE() _q,
                          QSOURCE() _s);
 
-// create msource object with linear modulation
-MSOURCE() MSOURCE(_create)(void)
+// generate samples internally
+int MSOURCE(_generate)(MSOURCE() _q);
+
+// create msource object
+MSOURCE() MSOURCE(_create)(unsigned int _M,
+                           unsigned int _m,
+                           float        _As)
 {
+    // validate input
+    if (_M < 2)
+        return liquid_error_config("msource%s_create(), number of subcarriers must be at least 2",EXTENSION);
+    if (_M % 2)
+        return liquid_error_config("msource%s_create(), number of subcarriers must be even",EXTENSION);
+    if (_m==0)
+        return liquid_error_config("msource%s_create(), number of subcarriers must be even",EXTENSION);
+
     // allocate memory for main object
     MSOURCE() q = (MSOURCE()) malloc( sizeof(struct MSOURCE(_s)) );
 
     //
-    q->sources = NULL;
+    q->sources     = NULL;
     q->num_sources = 0;
     q->id_counter  = 0;
+    q->M           = _M;
+    q->m           = _m;
+    q->As          = _As;
+    q->num_samples = 0;
+
+    q->ch = firpfbch2_crcf_create_kaiser(LIQUID_SYNTHESIZER, q->M, q->m, q->As);
+
+    q->buf_freq = (float complex*) malloc(q->M   * sizeof(float complex)); 
+    q->buf_time = (float complex*) malloc(q->M/2 * sizeof(float complex)); 
+
+    q->read_index = q->M/2; // indicate buffer is empty
+    q->num_blocks = 0;
 
     // reset and return main object
     MSOURCE(_reset)(q);
     return q;
 }
 
+// create msource object with default parameters
+MSOURCE() MSOURCE(_create_default)(void)
+{
+    return MSOURCE(_create)(1200, 4, 60);
+}
+
 // destroy msource object, freeing all internal memory
-void MSOURCE(_destroy)(MSOURCE() _q)
+int MSOURCE(_destroy)(MSOURCE() _q)
 {
     // destroy internal objects
     unsigned int i;
@@ -133,188 +125,300 @@ void MSOURCE(_destroy)(MSOURCE() _q)
     // free list of sources
     free(_q->sources);
 
+    // destroy channelizer
+    firpfbch2_crcf_destroy(_q->ch);
+
+    // free buffers
+    free(_q->buf_freq);
+    free(_q->buf_time);
+
     // free main object
     free(_q);
+    return LIQUID_OK;
 }
 
 // reset msource internal state
-void MSOURCE(_reset)(MSOURCE() _q)
+int MSOURCE(_reset)(MSOURCE() _q)
 {
+    // reset all internal objects
+    _q->read_index = _q->M/2;
+    return LIQUID_OK;
 }
 
 // print
-void MSOURCE(_print)(MSOURCE() _q)
+int MSOURCE(_print)(MSOURCE() _q)
 {
-    printf("msource%s:\n", EXTENSION);
+    printf("msource%s, M=%u, m=%u, As=%.1f dB, %llu samples:\n",
+            EXTENSION, _q->M, _q->m, _q->As, _q->num_samples);
     unsigned int i;
     for (i=0; i<_q->num_sources; i++)
         QSOURCE(_print)(_q->sources[i]);
+    return LIQUID_OK;
+}
+
+// add user-defined source
+int MSOURCE(_add_user)(MSOURCE()          _q,
+                       float              _fc,
+                       float              _bw,
+                       float              _gain,
+                       void *             _userdata,
+                       MSOURCE(_callback) _callback)
+{
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, _bw, _gain);
+    QSOURCE(_init_user)(s, _userdata, (void*)_callback);
+    return MSOURCE(_add_source)(_q, s);
 }
 
 // add tone source
-int MSOURCE(_add_tone)(MSOURCE() _q)
+int MSOURCE(_add_tone)(MSOURCE() _q,
+                       float     _fc,
+                       float     _bw,
+                       float     _gain)
 {
-    int id = _q->id_counter;
-    _q->id_counter++;
-    QSOURCE() s = QSOURCE(_create_tone)(id);
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, _bw, _gain);
+    QSOURCE(_init_tone)(s);
+    return MSOURCE(_add_source)(_q, s);
+}
+
+// add chirp source
+int MSOURCE(_add_chirp)(MSOURCE() _q,
+                        float     _fc,
+                        float     _bw,
+                        float     _gain,
+                        float     _duration,
+                        int       _negate,
+                        int       _single)
+{
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, _bw, _gain);
+    QSOURCE(_init_chirp)(s, _duration, _negate, _single);
     return MSOURCE(_add_source)(_q, s);
 }
 
 // add noise source
 int MSOURCE(_add_noise)(MSOURCE() _q,
-                        float     _bandwidth)
+                        float     _fc,
+                        float     _bw,
+                        float     _gain)
 {
-    // validate input
-    if (_bandwidth <= 0.0f || _bandwidth > 1.0f) {
-        fprintf(stderr,"error: msource%s_add_noise(), noise bandwidth must be in (0,1.0]\n", EXTENSION);
-        exit(1);
-    } else if (_bandwidth >= 0.9995f) {
-        _bandwidth = 0.9995f;
-    }
-
-    int id = _q->id_counter;
-    _q->id_counter++;
-    QSOURCE() s = QSOURCE(_create_noise)(id, _bandwidth);
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, _bw, _gain);
+    QSOURCE(_init_noise)(s);
     return MSOURCE(_add_source)(_q, s);
 }
 
-// add modem source
+// add linear modem source
 int MSOURCE(_add_modem)(MSOURCE()    _q,
+                        float        _fc,
+                        float        _bw,
+                        float        _gain,
                         int          _ms,
-                        unsigned int _k,
                         unsigned int _m,
                         float        _beta)
 {
-    // validate input
-    if (_k < 2) {
-        fprintf(stderr,"error: msource%s_create(), samples/symbol must be at least 2\n", EXTENSION);
-        exit(1);
-    } else if (_m == 0) {
-        fprintf(stderr,"error: msource%s_create(), filter delay must be greater than zero\n", EXTENSION);
-        exit(1);
-    } else if (_beta <= 0.0f || _beta > 1.0f) {
-        fprintf(stderr,"error: msource%s_create(), filter excess bandwidth must be in (0,1]\n", EXTENSION);
-        exit(1);
-    } else if (_ms == LIQUID_MODEM_UNKNOWN || _ms >= LIQUID_MODEM_NUM_SCHEMES) {
-        fprintf(stderr,"error: msource%s_create(), invalid modulation scheme\n", EXTENSION);
-        exit(1);
-    }
+    // create object with double the bandwidth to account for 2 samples/symbol
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, 2*_bw, _gain);
+    QSOURCE(_init_modem)(s, _ms, _m, _beta);
+    return MSOURCE(_add_source)(_q, s);
+}
 
-    int id = _q->id_counter;
-    _q->id_counter++;
-    QSOURCE() s = QSOURCE(_create_modem)(id, _ms, _k, _m, _beta);
+// add frequency-shift keying modem source
+int MSOURCE(_add_fsk)(MSOURCE()    _q,
+                      float        _fc,
+                      float        _bw,
+                      float        _gain,
+                      unsigned int _m,
+                      unsigned int _k)
+{
+    // create object with double the bandwidth to account for 2 samples/symbol
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, 2*_bw, _gain);
+    QSOURCE(_init_fsk)(s, _m, _k);
+    return MSOURCE(_add_source)(_q, s);
+}
+
+// add GMSK modem source
+int MSOURCE(_add_gmsk)(MSOURCE()    _q,
+                       float        _fc,
+                       float        _bw,
+                       float        _gain,
+                       unsigned int _m,
+                       float        _bt)
+{
+    // create object with double the bandwidth to account for 2 samples/symbol
+    QSOURCE() s = QSOURCE(_create)(_q->M, _q->m, _q->As, _fc, 2*_bw, _gain);
+    QSOURCE(_init_gmsk)(s, _m, _bt);
     return MSOURCE(_add_source)(_q, s);
 }
 
 // remove signal
-void MSOURCE(_remove)(MSOURCE() _q,
-                      int       _id)
+int MSOURCE(_remove)(MSOURCE() _q,
+                     int       _id)
 {
     // find source object matching id
     unsigned int i;
     int id_found = 0;
     for (i=0; i<_q->num_sources; i++) {
-        if (_q->sources[i]->id == _id) {
+        if (QSOURCE(_get_id)(_q->sources[i]) == _id) {
             id_found = 1;
             break;
         }
     }
 
     // check to see if id was found
-    if (!id_found) {
-        fprintf(stderr,"error: qsource%s_remove(), signal id (%d) not found\n",
-                EXTENSION, _id);
-        exit(1);
-    }
+    if (!id_found)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_remove(), signal id (%d) not found",EXTENSION,_id);
 
     // delete source
-    //printf("deleting source with id %d (requested %d)\n", _q->sources[i]->id, _id);
     QSOURCE(_destroy)(_q->sources[i]);
 
     //
     _q->num_sources--;
 
     // shift sources down
-    for (i; i<_q->num_sources; i++)
+    for (; i<_q->num_sources; i++)
         _q->sources[i] = _q->sources[i+1];
+
+    return LIQUID_OK;
 }
 
 // enable/disable signal
-void MSOURCE(_enable)(MSOURCE() _q,
-                      int       _id)
+int MSOURCE(_enable)(MSOURCE() _q,
+                     int       _id)
 {
+    QSOURCE() source = MSOURCE(_get_source)(_q, _id);
+    if (source == NULL)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_enable(), could not find source with id %u",EXTENSION,_id);
+
+    // set source gain
+    return QSOURCE(_enable)(source);
 }
 
-void MSOURCE(_disable)(MSOURCE() _q,
-                       int       _id)
+int MSOURCE(_disable)(MSOURCE() _q,
+                      int       _id)
 {
+    QSOURCE() source = MSOURCE(_get_source)(_q, _id);
+    if (source == NULL)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_disable(), could not find source with id %u",EXTENSION,_id);
+
+    // set source gain
+    return QSOURCE(_disable)(source);
 }
 
 // set signal gain
 //  _q      :   msource object
 //  _id     :   source id
 //  _gain_dB:   signal gain in dB
-void MSOURCE(_set_gain)(MSOURCE() _q,
-                        int       _id,
-                        float     _gain_dB)
+int MSOURCE(_set_gain)(MSOURCE() _q,
+                       int       _id,
+                       float     _gain_dB)
 {
-    // validate input
-    if (_id > _q->num_sources) {
-        fprintf(stderr,"error: qsource%s_set_gain(), signal id (%d) out of range (%u)\n",
-                EXTENSION, _id, _q->num_sources);
-        exit(1);
-    }
+    QSOURCE() source = MSOURCE(_get_source)(_q, _id);
+    if (source == NULL)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_set_gain(), could not find source with id %u",EXTENSION,_id);
 
     // set source gain
-    QSOURCE(_set_gain)(_q->sources[_id], _gain_dB);
+    return QSOURCE(_set_gain)(source, _gain_dB);
+}
+
+// set signal gain
+//  _q      :   msource object
+//  _id     :   source id
+//  _gain_dB:   signal gain in dB
+int MSOURCE(_get_gain)(MSOURCE() _q,
+                       int       _id,
+                       float *   _gain_dB)
+{
+    QSOURCE() source = MSOURCE(_get_source)(_q, _id);
+    if (source == NULL)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_get_gain(), could not find source with id %u",EXTENSION,_id);
+
+    // set source gain
+    *_gain_dB = QSOURCE(_get_gain)(source);
+    return LIQUID_OK;
+}
+
+// Get number of samples generated by the object so far
+unsigned long long int MSOURCE(_get_num_samples)(MSOURCE() _q)
+{
+    return _q->num_samples;
 }
 
 // set carrier offset to signal
 //  _q      :   msource object
 //  _id     :   source id
 //  _fc     :   carrier offset, fc in [-0.5,0.5]
-void MSOURCE(_set_frequency)(MSOURCE() _q,
-                             int       _id,
-                             float     _dphi)
+int MSOURCE(_set_frequency)(MSOURCE() _q,
+                            int       _id,
+                            float     _dphi)
 {
-    // validate input
-    if (_id > _q->num_sources) {
-        fprintf(stderr,"error: qsource%s_set_frequency(), signal id (%d) out of range (%u)\n",
-                EXTENSION, _id, _q->num_sources);
-        exit(1);
-    
-    }
+    QSOURCE() source = MSOURCE(_get_source)(_q, _id);
+    if (source == NULL)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_set_frequency(), could not find source with id %u",EXTENSION,_id);
+
     // set source frequency
-    QSOURCE(_set_frequency)(_q->sources[_id], _dphi);
+    return QSOURCE(_set_frequency)(source, _dphi);
+}
+
+// set carrier offset to signal
+//  _q      :   msource object
+//  _id     :   source id
+//  _fc     :   carrier offset, fc in [-0.5,0.5]
+int MSOURCE(_get_frequency)(MSOURCE() _q,
+                            int       _id,
+                            float *   _dphi)
+{
+    QSOURCE() source = MSOURCE(_get_source)(_q, _id);
+    if (source == NULL)
+        return liquid_error(LIQUID_EIRANGE,"msource%s_get_frequency(), could not find source with id %u",EXTENSION,_id);
+
+    // set source frequency
+    *_dphi = QSOURCE(_get_frequency)(source);
+    return LIQUID_OK;
 }
 
 // write block of samples to output buffer
 //  _q      : synchronizer object
 //  _buf    : output buffer [size: _buf_len x 1]
 //  _buf_len: output buffer size
-void MSOURCE(_write_samples)(MSOURCE()    _q,
+int MSOURCE(_write_samples)(MSOURCE()    _q,
                              TO *         _buf,
                              unsigned int _buf_len)
 {
-    TO sample;
-    TO accumulation;
     unsigned int i;
-    unsigned int j;
     for (i=0; i<_buf_len; i++) {
-        accumulation = 0;
-
-        for (j=0; j<_q->num_sources; j++) {
-            QSOURCE(_gen_sample)(_q->sources[j], &sample);
-            accumulation += sample;
+        // generate more samples if needed
+        if (_q->read_index >= _q->M/2) {
+            MSOURCE(_generate)(_q);
         }
 
-        _buf[i] = accumulation;
+        // write output sample and update counter
+        _buf[i] = _q->buf_time[_q->read_index++];
     }
+    return LIQUID_OK;
 }
 
 //
 // internal msource methods
 //
+
+// find qsource object by id within list, return -1 if not found
+int MSOURCE(_find)(MSOURCE() _q, int _id)
+{
+    unsigned int i;
+    for (i=0; i<_q->num_sources; i++) {
+        if (QSOURCE(_get_id)(_q->sources[i]) == _id)
+            return (int)i;
+    }
+    return -1;
+}
+
+// get source by id
+QSOURCE() MSOURCE(_get_source)(MSOURCE() _q,
+                               int       _id)
+{
+    int index = MSOURCE(_find)(_q, _id);
+    if (index < 0)
+        return liquid_error_config("msource%s_get_source(), could not find source with id %u",EXTENSION,_id);
+    return _q->sources[index];
+}
 
 // add source to list
 int MSOURCE(_add_source)(MSOURCE() _q,
@@ -333,178 +437,35 @@ int MSOURCE(_add_source)(MSOURCE() _q,
 
     // append new object to end of list
     _q->sources[_q->num_sources] = _s;
-
-    //
     _q->num_sources++;
 
-    //
-    return _q->num_sources-1;
+    // set id and increment internal counter
+    int id = _q->id_counter;
+    QSOURCE(_set_id)(_s, id);
+    _q->id_counter++;
+
+    // return id to user
+    return id;
 }
 
-// get source by id
-QSOURCE() MSOURCE(_get_source)(MSOURCE() _q,
-                               int       _id)
+// generate samples internally
+int MSOURCE(_generate)(MSOURCE() _q)
 {
+    // clear buffer
+    memset(_q->buf_freq, 0, _q->M*sizeof(float complex));
+
+    // add sources into main frequency buffer
     unsigned int i;
-    for (i=0; i<_q->num_sources; i++) {
-        if (_q->sources[i]->id == _id)
-            return _q->sources[i];
-    }
+    for (i=0; i<_q->num_sources; i++)
+        QSOURCE(_generate_into)(_q->sources[i], _q->buf_freq);
 
-    return NULL;
-}
+    // run synthesis channelizer
+    firpfbch2_crcf_execute(_q->ch, _q->buf_freq, _q->buf_time);
 
-
-//
-// internal qsource
-//
-QSOURCE() QSOURCE(_create_tone)(int _id)
-{
-    // allocate memory for main object
-    QSOURCE() q = (QSOURCE()) malloc( sizeof(struct QSOURCE(_s)) );
-
-    q->id   = _id;
-    q->type = QSOURCE_TONE;
-
-    q->mixer = NCO(_create)(LIQUID_VCO);
-    q->gain  = 1;
-
-    // reset and return main object
-    QSOURCE(_reset)(q);
-    return q;
-}
-
-QSOURCE() QSOURCE(_create_noise)(int   _id,
-                                 float _bandwidth)
-{
-    // TODO: validate input
-
-    // allocate memory for main object
-    QSOURCE() q = (QSOURCE()) malloc( sizeof(struct QSOURCE(_s)) );
-
-    q->id   = _id;
-    q->type = QSOURCE_NOISE;
-
-    unsigned int order = 7;
-    q->source.noise.filter = IIRFILT(_create_prototype)(LIQUID_IIRDES_ELLIP,
-                                                        LIQUID_IIRDES_LOWPASS,
-                                                        LIQUID_IIRDES_SOS,
-                                                        order,
-                                                        0.5*_bandwidth, 0.0f,
-                                                        0.1f, 80.0f);
-
-    q->mixer = NCO(_create)(LIQUID_VCO);
-    q->gain  = 1;
-
-    // reset and return main object
-    QSOURCE(_reset)(q);
-    return q;
-}
-
-QSOURCE() QSOURCE(_create_modem)(int          _id,
-                                 int          _ms,
-                                 unsigned int _k,
-                                 unsigned int _m,
-                                 float        _beta)
-{
-    // allocate memory for main object
-    QSOURCE() q = (QSOURCE()) malloc( sizeof(struct QSOURCE(_s)) );
-
-    q->id   = _id;
-    q->type = QSOURCE_MODEM;
-
-    q->source.linmod.symstream=SYMSTREAM(_create_linear)(LIQUID_FIRFILT_ARKAISER,_k,_m,_beta,_ms);
-
-    q->mixer = NCO(_create)(LIQUID_VCO);
-    q->gain  = 1;
-
-    // reset and return main object
-    QSOURCE(_reset)(q);
-    return q;
-}
-
-void QSOURCE(_print)(QSOURCE() _q)
-{
-    printf("  qsource%s[%3d] : ", EXTENSION, _q->id);
-    // print type-specific parameters
-    switch (_q->type) {
-    case QSOURCE_TONE:  printf("tone\n");   break;
-    case QSOURCE_NOISE: printf("noise\n");  break;
-    case QSOURCE_MODEM: printf("modem\n");  break;
-    default:
-        fprintf(stderr,"error: qsource%s_print(), internal logic error\n", EXTENSION);
-        exit(1);
-    }
-}
-
-void QSOURCE(_destroy)(QSOURCE() _q)
-{
-    // free internal type-specific objects
-    switch (_q->type) {
-    case QSOURCE_TONE: break;
-    case QSOURCE_NOISE:
-        IIRFILT(_destroy)(_q->source.noise.filter);
-        break;
-    case QSOURCE_MODEM:
-        SYMSTREAM(_destroy)(_q->source.linmod.symstream);
-        break;
-    default:
-        fprintf(stderr,"error: qsource%s_destroy(), internal logic error\n", EXTENSION);
-        exit(1);
-    }
-
-    // destroy mixer object
-    NCO(_destroy)(_q->mixer);
-
-    // free main object memory
-    free(_q);
-}
-
-void QSOURCE(_reset)(QSOURCE() _q)
-{
-}
-
-void QSOURCE(_set_gain)(QSOURCE() _q,
-                        float     _gain_dB)
-{
-    // convert from dB
-    _q->gain = powf(10.0f, _gain_dB/20.0f);
-}
-
-void QSOURCE(_set_frequency)(QSOURCE() _q,
-                             float     _dphi)
-{
-    NCO(_set_frequency)(_q->mixer, _dphi);
-}
-
-void QSOURCE(_gen_sample)(QSOURCE() _q,
-                          TO *      _v)
-{
-    TO sample;
-
-    // free internal type-specific objects
-    switch (_q->type) {
-    case QSOURCE_TONE:
-        sample = 1.0f;
-        break;
-    case QSOURCE_NOISE:
-        IIRFILT(_execute)(_q->source.noise.filter, (randnf() + _Complex_I*randnf())*M_SQRT1_2, &sample);
-        break;
-    case QSOURCE_MODEM:
-        SYMSTREAM(_write_samples)(_q->source.linmod.symstream, &sample, 1);
-        break;
-    default:
-        fprintf(stderr,"error: qsource%s_gen_sample(), internal logic error\n", EXTENSION);
-        exit(1);
-    }
-
-    // apply gain
-    sample *= _q->gain;
-
-    // mix sample up
-    NCO(_mix_up)(_q->mixer, sample, _v);
-
-    // step mixer
-    NCO(_step)(_q->mixer);
+    // update state
+    _q->read_index = 0;
+    _q->num_blocks++;
+    _q->num_samples += _q->M / 2;
+    return LIQUID_OK;
 }
 

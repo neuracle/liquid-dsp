@@ -20,18 +20,15 @@ void usage()
 {
     printf("cpfskmodem_example -- continuous-phase frequency-shift keying example\n");
     printf("options:\n");
-    printf("  h     : print help\n");
-    printf("  t     : filter type: [square], rcos-full, rcos-half, gmsk\n");
-    printf("  p     : bits/symbol,              default:  1\n");
-    printf("  H     : modulation index,         default:  0.5\n");
-    printf("  k     : samples/symbol,           default:  8\n");
-    printf("  m     : filter delay (symbols),   default:  3\n");
-    printf("  b     : filter roll-off,          default:  0.35\n");
-    printf("  n     : number of data symbols,   default: 80\n");
-    printf("  s     : SNR [dB],                 default: 40\n");
-    printf("  F     : carrier frequency offset, default:  0\n");
-    printf("  P     : carrier phase offset,     default:  0\n");
-    printf("  T     : fractional symbol offset, default:  0\n");
+    printf(" -h             : print help\n");
+    printf(" -t <type>      : filter type: [square], rcos-full, rcos-half, gmsk\n");
+    printf(" -p <b/s>       : bits/symbol,              default:  1\n");
+    printf(" -H <index>     : modulation index,         default:  0.5\n");
+    printf(" -k <s/sym>     : samples/symbol,           default:  8\n");
+    printf(" -m <delay>     : filter delay (symbols),   default:  3\n");
+    printf(" -b <rolloff>   : filter roll-off,          default:  0.35\n");
+    printf(" -n <num>       : number of data symbols,   default: 80\n");
+    printf(" -s <snr>       : SNR [dB],                 default: 40\n");
 }
 
 int main(int argc, char*argv[])
@@ -44,13 +41,10 @@ int main(int argc, char*argv[])
     float           beta        = 0.35f;    // GMSK bandwidth-time factor
     unsigned int    num_symbols = 20;       // number of data symbols
     float           SNRdB       = 40.0f;    // signal-to-noise ratio [dB]
-    float           cfo         = 0.0f;     // carrier frequency offset
-    float           cpo         = 0.0f;     // carrier phase offset
-    float           tau         = 0.0f;     // fractional symbol timing offset
     int             filter_type = LIQUID_CPFSK_SQUARE;
 
     int dopt;
-    while ((dopt = getopt(argc,argv,"ht:p:H:k:m:b:n:s:F:P:T:")) != EOF) {
+    while ((dopt = getopt(argc,argv,"ht:p:H:k:m:b:n:s:")) != EOF) {
         switch (dopt) {
         case 'h': usage();                      return 0;
         case 't':
@@ -74,9 +68,6 @@ int main(int argc, char*argv[])
         case 'b': beta  = atof(optarg);         break;
         case 'n': num_symbols = atoi(optarg);   break;
         case 's': SNRdB = atof(optarg);         break;
-        case 'F': cfo    = atof(optarg);        break;
-        case 'P': cpo    = atof(optarg);        break;
-        case 'T': tau    = atof(optarg);        break;
         default:
             exit(1);
         }
@@ -85,15 +76,15 @@ int main(int argc, char*argv[])
     unsigned int i;
 
     // derived values
-    unsigned int num_samples = k*num_symbols;
-    unsigned int M = 1 << bps;              // constellation size
-    float nstd = powf(10.0f, -SNRdB/20.0f);
+    unsigned int  num_samples = k*num_symbols;
+    unsigned int  M           = 1 << bps;
+    float         nstd        = powf(10.0f, -SNRdB/20.0f);
 
     // arrays
-    unsigned int sym_in[num_symbols];       // input symbols
-    float complex x[num_samples];           // transmitted signal
-    float complex y[num_samples];           // received signal
-    unsigned int sym_out[num_symbols];      // output symbols
+    unsigned int  sym_in [num_symbols]; // input symbols
+    float complex x      [num_samples]; // transmitted signal
+    float complex y      [num_samples]; // received signal
+    unsigned int  sym_out[num_symbols]; // output symbols
 
     // create modem objects
     cpfskmod mod = cpfskmod_create(bps, h, k, m, beta, filter_type);
@@ -107,48 +98,20 @@ int main(int argc, char*argv[])
     printf("delay: %u samples\n", delay);
 
     // generate message signal
-    for (i=0; i<num_symbols; i++) {
+    for (i=0; i<num_symbols; i++)
         sym_in[i] = rand() % M;
-        printf("sym_in(%3u) = %2u\n", i, sym_in[i]);
-    }
 
     // modulate signal
     for (i=0; i<num_symbols; i++)
         cpfskmod_modulate(mod, sym_in[i], &x[k*i]);
 
-    // push through channel
-    float sample_offset = -tau * k;
-    int   sample_delay  = (int)roundf(sample_offset);
-    float dt            = sample_offset - (float)sample_delay;
-    printf("symbol delay    :   %f\n", tau);
-    printf("sample delay    :   %f = %d + %f\n", sample_offset, sample_delay, dt);
-    firfilt_crcf fchannel = firfilt_crcf_create_kaiser(8*k+2*sample_delay+1, 0.45f, 40.0f, dt);
-    for (i=0; i<num_samples; i++) {
-#if 0
-        // push through channel delay
-        firfilt_crcf_push(fchannel, x[i]);
-        firfilt_crcf_execute(fchannel, &y[i]);
-
-        // add carrier frequency/phase offset
-        y[i] *= cexpf(_Complex_I*(cfo*i + cpo));
-
-        // add noise
-        y[i] += nstd*(randnf() + _Complex_I*randnf())*M_SQRT1_2;
-#else
-        y[i] = x[i];
-#endif
-    }
-    firfilt_crcf_destroy(fchannel);
+    // push through channel (add noise)
+    for (i=0; i<num_samples; i++)
+        y[i] = x[i] + nstd*(randnf() + _Complex_I*randnf())*M_SQRT1_2;
 
     // demodulate signal
-#if 0
-    unsigned int nw=0;
-    cpfskdem_demodulate(dem, y, num_samples, sym_out, &nw);
-    printf("demodulator wrote %u symbols\n", nw);
-#else
     for (i=0; i<num_symbols; i++)
         sym_out[i] = cpfskdem_demodulate(dem, &y[i*k]);
-#endif
 
     // print/count errors
     unsigned int num_errors = 0;
@@ -157,7 +120,7 @@ int main(int argc, char*argv[])
         printf("  %3u : %2u %2u %s\n", i, sym_in[i-delay], sym_out[i], is_err ? "*" : "");
         num_errors += is_err;
     }
-    printf("errors: %u\n", num_errors);
+    printf("symbol errors: %u / %u\n", num_errors, num_symbols-delay);
 
     // destroy modem objects
     cpfskmod_destroy(mod);
@@ -166,9 +129,7 @@ int main(int argc, char*argv[])
     // compute power spectral density of transmitted signal
     unsigned int nfft = 1024;
     float psd[nfft];
-    spgramcf periodogram = spgramcf_create_kaiser(nfft, nfft/2, 8.0f);
-    spgramcf_estimate_psd(periodogram, x, num_samples, psd);
-    spgramcf_destroy(periodogram);
+    spgramcf_estimate_psd(nfft, x, num_samples, psd);
 
     // 
     // export results

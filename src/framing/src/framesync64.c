@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -43,8 +43,8 @@
 #define FRAMESYNC64_ENABLE_EQ       0
 
 // push samples through detection stage
-void framesync64_execute_seekpn(framesync64   _q,
-                                float complex _x);
+int framesync64_execute_seekpn(framesync64   _q,
+                               float complex _x);
 
 // step receiver mixer, matched filter, decimator
 //  _q      :   frame synchronizer
@@ -55,19 +55,20 @@ int framesync64_step(framesync64     _q,
                      float complex * _y);
 
 // push samples through synchronizer, saving received p/n symbols
-void framesync64_execute_rxpreamble(framesync64   _q,
-                                    float complex _x);
+int framesync64_execute_rxpreamble(framesync64   _q,
+                                   float complex _x);
 
 // receive payload symbols
-void framesync64_execute_rxpayload(framesync64   _q,
-                                   float complex _x);
+int framesync64_execute_rxpayload(framesync64   _q,
+                                  float complex _x);
 
 // framesync64 object structure
 struct framesync64_s {
     // callback
     framesync_callback  callback;   // user-defined callback function
     void *              userdata;   // user-defined data structure
-    framesyncstats_s    framestats; // frame statistic object
+    framesyncstats_s    framesyncstats; // frame statistic object (synchronizer)
+    framedatastats_s    framedatastats; // frame statistic object (packet statistics)
     
     // synchronizer objects
     unsigned int        m;          // filter delay (symbols)
@@ -133,8 +134,8 @@ framesync64 framesync64_create(framesync_callback _callback,
     // generate p/n sequence
     msequence ms = msequence_create(7, 0x0089, 1);
     for (i=0; i<64; i++) {
-        q->preamble_pn[i] = (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2) +
-                            (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2)*_Complex_I;
+        q->preamble_pn[i]  = (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2);
+        q->preamble_pn[i] += (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2)*_Complex_I;
     }
     msequence_destroy(ms);
 
@@ -169,7 +170,10 @@ framesync64 framesync64_create(framesync_callback _callback,
 
     // create pilot synchronizer
     q->pilotsync   = qpilotsync_create(600, 21);
-    assert( qpilotsync_get_frame_len(q->pilotsync)==630 );
+    assert( qpilotsync_get_frame_len(q->pilotsync)==630);
+ 
+    // reset global data counters
+    framesync64_reset_framedatastats(q);
 
 #if DEBUG_FRAMESYNC64
     // set debugging flags, objects to NULL
@@ -184,7 +188,7 @@ framesync64 framesync64_create(framesync_callback _callback,
 }
 
 // destroy frame synchronizer object, freeing all internal memory
-void framesync64_destroy(framesync64 _q)
+int framesync64_destroy(framesync64 _q)
 {
 #if DEBUG_FRAMESYNC64
     // clean up debug objects (if created)
@@ -205,16 +209,18 @@ void framesync64_destroy(framesync64 _q)
 
     // free main object memory
     free(_q);
+    return LIQUID_OK;
 }
 
 // print frame synchronizer object internals
-void framesync64_print(framesync64 _q)
+int framesync64_print(framesync64 _q)
 {
     printf("framesync64:\n");
+    return framedatastats_print(&_q->framedatastats);
 }
 
 // reset frame synchronizer object
-void framesync64_reset(framesync64 _q)
+int framesync64_reset(framesync64 _q)
 {
     // reset binary pre-demod synchronizer
     qdetector_cccf_reset(_q->detector);
@@ -231,16 +237,17 @@ void framesync64_reset(framesync64 _q)
     _q->payload_counter = 0;
     
     // reset frame statistics
-    _q->framestats.evm = 0.0f;
+    _q->framesyncstats.evm = 0.0f;
+    return LIQUID_OK;
 }
 
 // execute frame synchronizer
 //  _q     :   frame synchronizer object
 //  _x      :   input sample array [size: _n x 1]
 //  _n      :   number of input samples
-void framesync64_execute(framesync64     _q,
-                         float complex * _x,
-                         unsigned int    _n)
+int framesync64_execute(framesync64     _q,
+                        float complex * _x,
+                        unsigned int    _n)
 {
     unsigned int i;
     for (i=0; i<_n; i++) {
@@ -262,10 +269,10 @@ void framesync64_execute(framesync64     _q,
             framesync64_execute_rxpayload(_q, _x[i]);
             break;
         default:
-            fprintf(stderr,"error: framesync64_exeucte(), unknown/unsupported state\n");
-            exit(1);
+            return liquid_error(LIQUID_EINT,"framesync64_exeucte(), unknown/unsupported state");
         }
     }
+    return LIQUID_OK;
 }
 
 // 
@@ -276,7 +283,7 @@ void framesync64_execute(framesync64     _q,
 //  _q     :   frame synchronizer object
 //  _x      :   input sample
 //  _sym    :   demodulated symbol
-void framesync64_execute_seekpn(framesync64   _q,
+int framesync64_execute_seekpn(framesync64   _q,
                                 float complex _x)
 {
     // push through pre-demod synchronizer
@@ -318,6 +325,7 @@ void framesync64_execute_seekpn(framesync64   _q,
         unsigned int buf_len = qdetector_cccf_get_buf_len(_q->detector);
         framesync64_execute(_q, v, buf_len);
     }
+    return LIQUID_OK;
 }
 
 // step receiver mixer, matched filter, decimator
@@ -368,7 +376,7 @@ int framesync64_step(framesync64     _q,
 //  _q     :   frame synchronizer object
 //  _x      :   input sample
 //  _sym    :   demodulated symbol
-void framesync64_execute_rxpreamble(framesync64   _q,
+int framesync64_execute_rxpreamble(framesync64   _q,
                                     float complex _x)
 {
     // step synchronizer
@@ -402,14 +410,15 @@ void framesync64_execute_rxpreamble(framesync64   _q,
         if (_q->preamble_counter == 64 + delay)
             _q->state = FRAMESYNC64_STATE_RXPAYLOAD;
     }
+    return LIQUID_OK;
 }
 
 // execute synchronizer, receiving payload
 //  _q      :   frame synchronizer object
 //  _x      :   input sample
 //  _sym    :   demodulated symbol
-void framesync64_execute_rxpayload(framesync64   _q,
-                                   float complex _x)
+int framesync64_execute_rxpayload(framesync64   _q,
+                                  float complex _x)
 {
     // step synchronizer
     float complex mf_out = 0.0f;
@@ -432,19 +441,25 @@ void framesync64_execute_rxpayload(framesync64   _q,
                                                     _q->payload_sym,
                                                     _q->payload_dec);
 
+            // update statistics
+            _q->framedatastats.num_frames_detected++;
+            _q->framedatastats.num_headers_valid  += _q->payload_valid;
+            _q->framedatastats.num_payloads_valid += _q->payload_valid;
+            _q->framedatastats.num_bytes_received += _q->payload_valid ? 64 : 0;
+
             // invoke callback
             if (_q->callback != NULL) {
-                // set framestats internals
-                _q->framestats.evm           = 0.0f; //20*log10f(sqrtf(_q->framestats.evm / 600));
-                _q->framestats.rssi          = 20*log10f(_q->gamma_hat);
-                _q->framestats.cfo           = nco_crcf_get_frequency(_q->mixer);
-                _q->framestats.framesyms     = _q->payload_sym;
-                _q->framestats.num_framesyms = 600;
-                _q->framestats.mod_scheme    = LIQUID_MODEM_QPSK;
-                _q->framestats.mod_bps       = 2;
-                _q->framestats.check         = LIQUID_CRC_24;
-                _q->framestats.fec0          = LIQUID_FEC_NONE;
-                _q->framestats.fec1          = LIQUID_FEC_GOLAY2412;
+                // set framesyncstats internals
+                _q->framesyncstats.evm           = qpilotsync_get_evm(_q->pilotsync);
+                _q->framesyncstats.rssi          = 20*log10f(_q->gamma_hat);
+                _q->framesyncstats.cfo           = nco_crcf_get_frequency(_q->mixer);
+                _q->framesyncstats.framesyms     = _q->payload_sym;
+                _q->framesyncstats.num_framesyms = 600;
+                _q->framesyncstats.mod_scheme    = LIQUID_MODEM_QPSK;
+                _q->framesyncstats.mod_bps       = 2;
+                _q->framesyncstats.check         = LIQUID_CRC_24;
+                _q->framesyncstats.fec0          = LIQUID_FEC_NONE;
+                _q->framesyncstats.fec1          = LIQUID_FEC_GOLAY2412;
 
                 // invoke callback method
                 _q->callback(&_q->payload_dec[0],   // header is first 8 bytes
@@ -452,24 +467,24 @@ void framesync64_execute_rxpayload(framesync64   _q,
                              &_q->payload_dec[8],   // payload is last 64 bytes
                              64,
                              _q->payload_valid,
-                             _q->framestats,
+                             _q->framesyncstats,
                              _q->userdata);
             }
 
             // reset frame synchronizer
-            framesync64_reset(_q);
-            return;
+            return framesync64_reset(_q);
         }
     }
+    return LIQUID_OK;
 }
 
 // enable debugging
-void framesync64_debug_enable(framesync64 _q)
+int framesync64_debug_enable(framesync64 _q)
 {
     // create debugging objects if necessary
 #if DEBUG_FRAMESYNC64
     if (_q->debug_objects_created)
-        return;
+        return LIQUID_OK;
 
     // create debugging objects
     _q->debug_x = windowcf_create(DEBUG_BUFFER_LEN);
@@ -477,31 +492,32 @@ void framesync64_debug_enable(framesync64 _q)
     // set debugging flags
     _q->debug_enabled = 1;
     _q->debug_objects_created = 1;
+    return LIQUID_OK;
 #else
-    fprintf(stderr,"framesync64_debug_enable(): compile-time debugging disabled\n");
+    return liquid_error(LIQUID_EICONFIG,"framesync64_debug_enable(): compile-time debugging disabled\n");
 #endif
 }
 
 // disable debugging
-void framesync64_debug_disable(framesync64 _q)
+int framesync64_debug_disable(framesync64 _q)
 {
     // disable debugging
 #if DEBUG_FRAMESYNC64
     _q->debug_enabled = 0;
+    return LIQUID_OK;
 #else
-    fprintf(stderr,"framesync64_debug_enable(): compile-time debugging disabled\n");
+    return liquid_error(LIQUID_EICONFIG,"framesync64_debug_enable(): compile-time debugging disabled\n");
 #endif
 }
 
 // print debugging information
-void framesync64_debug_print(framesync64  _q,
+int framesync64_debug_print(framesync64  _q,
                              const char * _filename)
 {
 #if DEBUG_FRAMESYNC64
-    if (!_q->debug_objects_created) {
-        fprintf(stderr,"error: framesync64_debug_print(), debugging objects don't exist; enable debugging first\n");
-        return;
-    }
+    if (!_q->debug_objects_created)
+        return liquid_error(LIQUID_EICONFIG,"framesync64_debug_print(), debugging objects don't exist; enable debugging first");
+
     unsigned int i;
     float complex * rc;
     FILE* fid = fopen(_filename,"w");
@@ -558,8 +574,21 @@ void framesync64_debug_print(framesync64  _q,
     fclose(fid);
 
     printf("framesync64/debug: results written to %s\n", _filename);
+    return LIQUID_OK;
 #else
-    fprintf(stderr,"framesync64_debug_print(): compile-time debugging disabled\n");
+    return liquid_error(LIQUID_EICONFIG,"framesync64_debug_print(): compile-time debugging disabled\n");
 #endif
+}
+
+// reset frame data statistics
+int framesync64_reset_framedatastats(framesync64 _q)
+{
+    return framedatastats_reset(&_q->framedatastats);
+}
+
+// retrieve frame data statistics
+framedatastats_s framesync64_get_framedatastats(framesync64 _q)
+{
+    return _q->framedatastats;
 }
 

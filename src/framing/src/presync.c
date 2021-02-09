@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,6 +47,16 @@ struct PRESYNC(_s) {
     float n_inv;        // 1/n (pre-computed for speed)
 };
 
+// correlate input sequence with particular sequence index
+//  _q      : pre-demod synchronizer object
+//  _id     : sequence index
+//  _rxy0   : positive frequency correlation output (non-conjugated)
+//  _rxy1   : negative frequency correlation output (conjugated)
+int PRESYNC(_correlate)(PRESYNC()       _q,
+                        unsigned int    _id,
+                        float complex * _rxy0,
+                        float complex * _rxy1);
+
 /* create binary pre-demod synchronizer                     */
 /*  _v          :   baseband sequence                       */
 /*  _n          :   baseband sequence length                */
@@ -58,13 +68,10 @@ PRESYNC() PRESYNC(_create)(TC *         _v,
                            unsigned int _m)
 {
     // validate input
-    if (_n < 1) {
-        fprintf(stderr, "error: bpresync_%s_create(), invalid input length\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_m == 0) {
-        fprintf(stderr, "error: bpresync_%s_create(), number of correlators must be at least 1\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_n < 1)
+        return liquid_error_config("bpresync_%s_create(), invalid input length", EXTENSION_FULL);
+    if (_m == 0)
+        return liquid_error_config("bpresync_%s_create(), number of correlators must be at least 1", EXTENSION_FULL);
 
     // allocate main object memory and initialize
     PRESYNC() _q = (PRESYNC()) malloc(sizeof(struct PRESYNC(_s)));
@@ -112,7 +119,7 @@ PRESYNC() PRESYNC(_create)(TC *         _v,
     return _q;
 }
 
-void PRESYNC(_destroy)(PRESYNC() _q)
+int PRESYNC(_destroy)(PRESYNC() _q)
 {
     unsigned int i;
 
@@ -136,32 +143,89 @@ void PRESYNC(_destroy)(PRESYNC() _q)
 
     // free main object memory
     free(_q);
+    return LIQUID_OK;
 }
 
-void PRESYNC(_print)(PRESYNC() _q)
+int PRESYNC(_print)(PRESYNC() _q)
 {
     printf("bpresync_%s: %u samples\n", EXTENSION_FULL, _q->n);
+    return LIQUID_OK;
 }
 
-void PRESYNC(_reset)(PRESYNC() _q)
+int PRESYNC(_reset)(PRESYNC() _q)
 {
-    WINDOW(_clear)(_q->rx_i);
-    WINDOW(_clear)(_q->rx_q);
+    WINDOW(_reset)(_q->rx_i);
+    WINDOW(_reset)(_q->rx_q);
+    return LIQUID_OK;
 }
 
-// correlate input sequence with particular 
-//  _q          :   pre-demod synchronizer object
-//  _id         :   ...
-void PRESYNC(_correlatex)(PRESYNC()       _q,
-                          unsigned int    _id,
-                          float complex * _rxy0,
-                          float complex * _rxy1)
+/* push input sample into pre-demod synchronizer            */
+/*  _q          :   pre-demod synchronizer object           */
+/*  _x          :   input sample                            */
+int PRESYNC(_push)(PRESYNC() _q,
+                    TI        _x)
+{
+    // push symbol into buffers
+    WINDOW(_push)(_q->rx_i, REAL(_x));
+    WINDOW(_push)(_q->rx_q, REAL(_x));
+    return LIQUID_OK;
+}
+
+/* correlate input sequence                                 */
+/*  _q          :   pre-demod synchronizer object           */
+/*  _rxy        :   output cross correlation                */
+/*  _dphi_hat   :   output frequency offset estimate        */
+int PRESYNC(_execute)(PRESYNC() _q,
+                      TO *      _rxy,
+                      float *   _dphi_hat)
+{
+    unsigned int i;
+    float complex rxy_max = 0;  // maximum cross-correlation
+    float abs_rxy_max = 0;      // absolute value of rxy_max
+    float complex rxy0;
+    float complex rxy1;
+    float dphi_hat = 0.0f;
+    for (i=0; i<_q->m; i++)  {
+
+        PRESYNC(_correlate)(_q, i, &rxy0, &rxy1);
+
+        // check non-conjugated value
+        if ( ABS(rxy0) > abs_rxy_max ) {
+            rxy_max     = rxy0;
+            abs_rxy_max = ABS(rxy0);
+            dphi_hat    = _q->dphi[i];
+        }
+
+        // check conjugated value
+        if ( ABS(rxy1) > abs_rxy_max ) {
+            rxy_max     = rxy1;
+            abs_rxy_max = ABS(rxy1);
+            dphi_hat    = -_q->dphi[i];
+        }
+    }
+
+    *_rxy      = rxy_max;
+    *_dphi_hat = dphi_hat;
+    return LIQUID_OK;
+}
+
+//
+// internal methods
+//
+
+// correlate input sequence with particular sequence index
+//  _q      : pre-demod synchronizer object
+//  _id     : sequence index
+//  _rxy0   : positive frequency correlation output (non-conjugated)
+//  _rxy1   : negative frequency correlation output (conjugated)
+int PRESYNC(_correlate)(PRESYNC()       _q,
+                        unsigned int    _id,
+                        float complex * _rxy0,
+                        float complex * _rxy1)
 {
     // validate input...
-    if (_id >= _q->m) {
-        fprintf(stderr,"error: bpresync_%s_correlatex(), invalid id\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_id >= _q->m)
+        return liquid_error(LIQUID_EICONFIG,"bpresync_%s_correlatex(), invalid id", EXTENSION_FULL);
 
     // get buffer pointers
     T * ri = NULL;
@@ -184,53 +248,6 @@ void PRESYNC(_correlatex)(PRESYNC()       _q,
     T rxy_i1 = rxy_ii + rxy_qq;
     T rxy_q1 = rxy_iq - rxy_qi;
     *_rxy1 = (rxy_i1 + rxy_q1 * _Complex_I) * _q->n_inv;
-}
-
-/* push input sample into pre-demod synchronizer            */
-/*  _q          :   pre-demod synchronizer object           */
-/*  _x          :   input sample                            */
-void PRESYNC(_push)(PRESYNC() _q,
-                    TI        _x)
-{
-    // push symbol into buffers
-    WINDOW(_push)(_q->rx_i, REAL(_x));
-    WINDOW(_push)(_q->rx_q, REAL(_x));
-}
-
-/* correlate input sequence                                 */
-/*  _q          :   pre-demod synchronizer object           */
-/*  _rxy        :   output cross correlation                */
-/*  _dphi_hat   :   output frequency offset estimate        */
-void PRESYNC(_correlate)(PRESYNC() _q,
-                         TO *      _rxy,
-                         float *   _dphi_hat)
-{
-    unsigned int i;
-    float complex rxy_max = 0;  // maximum cross-correlation
-    float abs_rxy_max = 0;      // absolute value of rxy_max
-    float complex rxy0;
-    float complex rxy1;
-    float dphi_hat = 0.0f;
-    for (i=0; i<_q->m; i++)  {
-
-        PRESYNC(_correlatex)(_q, i, &rxy0, &rxy1);
-
-        // check non-conjugated value
-        if ( ABS(rxy0) > abs_rxy_max ) {
-            rxy_max     = rxy0;
-            abs_rxy_max = ABS(rxy0);
-            dphi_hat    = _q->dphi[i];
-        }
-
-        // check conjugated value
-        if ( ABS(rxy1) > abs_rxy_max ) {
-            rxy_max     = rxy1;
-            abs_rxy_max = ABS(rxy1);
-            dphi_hat    = -_q->dphi[i];
-        }
-    }
-
-    *_rxy      = rxy_max;
-    *_dphi_hat = dphi_hat;
+    return LIQUID_OK;
 }
 

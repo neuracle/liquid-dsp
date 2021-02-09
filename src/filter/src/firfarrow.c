@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -72,16 +72,14 @@ FIRFARROW() FIRFARROW(_create)(unsigned int _h_len,
                                float        _As)
 {
     // validate input
-    if (_h_len < 2) {
-        fprintf(stderr,"error: firfarrow_%s_create(), filter length must be > 2\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_p < 1) {
-        fprintf(stderr,"error: firfarrow_%s_create(), polynomial order must be at least 1\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_fc < 0.0f || _fc > 0.5f) {
-        fprintf(stderr,"error: firfarrow_%s_create(), filter cutoff must be in [0,0.5]\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_h_len < 2)
+        return liquid_error_config("firfarrow_%s_create(), filter length must be > 2", EXTENSION_FULL);
+    if (_p < 1)
+        return liquid_error_config("firfarrow_%s_create(), polynomial order must be at least 1", EXTENSION_FULL);
+    if (_fc < 0.0f || _fc > 0.5f)
+        return liquid_error_config("firfarrow_%s_create(), filter cutoff must be in [0,0.5]", EXTENSION_FULL);
+    if (_As < 0.0f)
+        return liquid_error_config("firfarrow_%s_create(), filter stop-band attenuation must be greater than zero", EXTENSION_FULL);
 
     // create main object
     FIRFARROW() q = (FIRFARROW()) malloc(sizeof(struct FIRFARROW(_s)));
@@ -160,7 +158,7 @@ void FIRFARROW(_print)(FIRFARROW() _q)
 void FIRFARROW(_reset)(FIRFARROW() _q)
 {
 #if FIRFARROW_USE_DOTPROD
-    WINDOW(_clear)(_q->w);
+    WINDOW(_reset)(_q->w);
 #else
     unsigned int i;
     for (i=0; i<_q->h_len; i++)
@@ -188,11 +186,11 @@ void FIRFARROW(_push)(FIRFARROW() _q,
 //  _q      : firfarrow object
 //  _mu     : fractional sample delay
 void FIRFARROW(_set_delay)(FIRFARROW() _q,
-                           float _mu)
+                           float       _mu)
 {
     // validate input
     if (_mu < -1.0f || _mu > 1.0f) {
-        fprintf(stderr,"warning: firfarrow_%s_set_delay(), delay out of range\n", EXTENSION_FULL);
+        fprintf(stderr,"warning: firfarrow_%s_set_delay(), delay must be in [-1,1]\n", EXTENSION_FULL);
     }
 
     unsigned int i, n=0;
@@ -325,7 +323,7 @@ void FIRFARROW(_genpoly)(FIRFARROW() _q)
             mu = ((float)j - (float)_q->Q)/((float)_q->Q) + 0.5f;
 
             h0 = sincf(2.0f*(_q->fc)*(x + mu));
-            h1 = kaiser(i,_q->h_len,beta,mu);
+            h1 = liquid_kaiser(i,_q->h_len,beta);
 #if FIRFARROW_DEBUG
             printf("  %3u : x=%12.8f, mu=%12.8f, h0=%12.8f, h1=%12.8f, hp=%12.8f\n",
                     j, x, mu, h0, h1, h0*h1);

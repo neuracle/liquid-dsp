@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <sys/resource.h>
-#include "liquid.h"
+#include "liquid.internal.h"
 
 #define FSKDEM_BENCH_API(m,k,bandwidth)     \
 (   struct rusage *     _start,             \
@@ -48,7 +48,7 @@ void fskdem_bench(struct rusage *     _start,
     // initialize demodulator
     fskdem dem = fskdem_create(_m,_k,_bandwidth);
 
-    unsigned int M = 1 << _m;   // constellation size
+    //unsigned int M = 1 << _m;   // constellation size
     
     unsigned long int i;
 

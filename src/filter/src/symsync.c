@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -44,7 +44,7 @@
 #define DEBUG_SYMSYNC_FILENAME  "symsync_internal_debug.m"
 #define DEBUG_BUFFER_LEN        (1024)
 
-// 
+//
 // forward declaration of internal methods
 //
 
@@ -123,19 +123,14 @@ SYMSYNC() SYMSYNC(_create)(unsigned int _k,
                            unsigned int _h_len)
 {
     // validate input
-    if (_k < 2) {
-        fprintf(stderr,"error: symsync_%s_create(), input sample rate must be at least 2\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_h_len == 0) {
-        fprintf(stderr,"error: symsync_%s_create(), filter length must be greater than zero\n", EXTENSION_FULL);
-        exit(1);
-    } else if ( (_h_len-1) % _M ) {
-        fprintf(stderr,"error: symsync_%s_create(), filter length must be of the form: h_len = m*_k*_M + 1 \n", EXTENSION_FULL);
-        exit(1);
-    } else if (_M == 0) {
-        fprintf(stderr,"error: symsync_%s_create(), number of filter banks must be greater than zero\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_k < 2)
+        return liquid_error_config("symsync_%s_create(), input sample rate must be at least 2", EXTENSION_FULL);
+    if (_M == 0)
+        return liquid_error_config("symsync_%s_create(), number of filter banks must be greater than zero", EXTENSION_FULL);
+    if (_h_len == 0)
+        return liquid_error_config("symsync_%s_create(), filter length must be greater than zero", EXTENSION_FULL);
+    if ( (_h_len-1) % _M )
+        return liquid_error_config("symsync_%s_create(), filter length must be of the form: h_len = m*_k*_M + 1 ", EXTENSION_FULL);
 
     // create main object
     SYMSYNC() q = (SYMSYNC()) malloc(sizeof(struct SYMSYNC(_s)));
@@ -149,7 +144,7 @@ SYMSYNC() SYMSYNC(_create)(unsigned int _k,
 
     // set internal sub-filter length
     q->h_len = (_h_len-1)/q->npfb;
-    
+
     // compute derivative filter
     TC dh[_h_len];
     float hdh_max = 0.0f;
@@ -171,7 +166,7 @@ SYMSYNC() SYMSYNC(_create)(unsigned int _k,
     // apply scaling factor for normalized response
     for (i=0; i<_h_len; i++)
         dh[i] *= 0.06f / hdh_max;
-    
+
     q->mf  = FIRPFB(_create)(q->npfb, _h, _h_len);
     q->dmf = FIRPFB(_create)(q->npfb, dh, _h_len);
 
@@ -182,9 +177,6 @@ SYMSYNC() SYMSYNC(_create)(unsigned int _k,
     q->pll = iirfiltsos_rrrf_create(q->B, q->A);
     SYMSYNC(_reset)(q);
     SYMSYNC(_set_lf_bw)(q, 0.01f);
-
-    // set output rate nominally at 1 sample/symbol (full decimation)
-    SYMSYNC(_set_output_rate)(q, 1);
 
     // unlock loop control
     SYMSYNC(_unlock)(q);
@@ -203,7 +195,7 @@ SYMSYNC() SYMSYNC(_create)(unsigned int _k,
 }
 
 // create square-root Nyquist symbol synchronizer
-//  _type   : filter type (e.g. LIQUID_RNYQUIST_RRC)
+//  _type   : filter type (e.g. LIQUID_FIRFILT_RRC)
 //  _k      : samples/symbol
 //  _m      : symbol delay
 //  _beta   : rolloff factor (0 < beta <= 1)
@@ -215,16 +207,14 @@ SYMSYNC() SYMSYNC(_create_rnyquist)(int          _type,
                                     unsigned int _M)
 {
     // validate input
-    if (_k < 2) {
-        fprintf(stderr,"error: symsync_%s_create_rnyquist(), samples/symbol must be at least 2\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_m == 0) {
-        fprintf(stderr,"error: symsync_%s_create_rnyquist(), filter delay (m) must be greater than zero\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_beta < 0.0f || _beta > 1.0f) {
-        fprintf(stderr,"error: symsync_%s_create_rnyquist(), filter excess bandwidth must be in [0,1]\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_k < 2)
+        return liquid_error_config("symsync_%s_create_rnyquist(), samples/symbol must be at least 2", EXTENSION_FULL);
+    if (_m == 0)
+        return liquid_error_config("symsync_%s_create_rnyquist(), filter delay (m) must be greater than zero", EXTENSION_FULL);
+    if (_beta < 0.0f || _beta > 1.0f)
+        return liquid_error_config("symsync_%s_create_rnyquist(), filter excess bandwidth must be in [0,1]", EXTENSION_FULL);
+    if (_M == 0)
+        return liquid_error_config("symsync_%s_create_rnyquist(), number of filters in bnak must be greater than zero", EXTENSION_FULL);
 
     // allocate memory for filter coefficients
     unsigned int H_len = 2*_M*_k*_m + 1;
@@ -255,16 +245,14 @@ SYMSYNC() SYMSYNC(_create_kaiser)(unsigned int _k,
                                   unsigned int _M)
 {
     // validate input
-    if (_k < 2) {
-        fprintf(stderr,"error: symsync_%s_create_kaiser(), samples/symbol must be at least 2\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_m == 0) {
-        fprintf(stderr,"error: symsync_%s_create_kaiser(), filter delay (m) must be greater than zero\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_beta < 0.0f || _beta > 1.0f) {
-        fprintf(stderr,"error: symsync_%s_create_kaiser(), filter excess bandwidth must be in [0,1]\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_k < 2)
+        return liquid_error_config("symsync_%s_create_kaiser(), samples/symbol must be at least 2", EXTENSION_FULL);
+    if (_m == 0)
+        return liquid_error_config("symsync_%s_create_kaiser(), filter delay (m) must be greater than zero", EXTENSION_FULL);
+    if (_beta < 0.0f || _beta > 1.0f)
+        return liquid_error_config("symsync_%s_create_kaiser(), filter excess bandwidth must be in [0,1]", EXTENSION_FULL);
+    if (_M == 0)
+        return liquid_error_config("symsync_%s_create_kaiser(), number of filters in bnak must be greater than zero", EXTENSION_FULL);
 
     // allocate memory for filter coefficients
     unsigned int H_len = 2*_M*_k*_m + 1;
@@ -363,8 +351,8 @@ void SYMSYNC(_set_output_rate)(SYMSYNC()    _q,
 {
     // validate input
     if (_k_out == 0) {
-        fprintf(stderr,"error: symsync_%s_output_rate(), output rate must be greater than 0\n", EXTENSION_FULL);
-        exit(1);
+        liquid_error(LIQUID_EICONFIG,"symsync_%s_output_rate(), output rate must be greater than 0", EXTENSION_FULL);
+        return;
     }
 
     // set output rate
@@ -382,8 +370,8 @@ void SYMSYNC(_set_lf_bw)(SYMSYNC() _q,
 {
     // validate input
     if (_bt < 0.0f || _bt > 1.0f) {
-        fprintf(stderr,"error: symsync_%s_set_lf_bt(), bandwidth must be in [0,1]\n", EXTENSION_FULL);
-        exit(1);
+        liquid_error(LIQUID_EICONFIG,"symsync_%s_set_lf_bt(), bandwidth must be in [0,1]", EXTENSION_FULL);
+        return;
     }
 
     // compute filter coefficients from bandwidth
@@ -402,7 +390,7 @@ void SYMSYNC(_set_lf_bw)(SYMSYNC() _q,
 
     // set internal parameters of 2nd-order IIR filter
     iirfiltsos_rrrf_set_coefficients(_q->pll, _q->B, _q->A);
-    
+
     // update rate adjustment factor
     _q->rate_adjustment = 0.5*_bt;
 }
@@ -451,13 +439,13 @@ void SYMSYNC(_step)(SYMSYNC()      _q,
     // push sample into MF and dMF filterbanks
     FIRPFB(_push)(_q->mf,  _x);
     FIRPFB(_push)(_q->dmf, _x);
-    
+
     // matched and derivative matched-filter outputs
     TO  mf; // matched filter output
     TO dmf; // derivative matched filter output
 
     unsigned int n=0;
-    
+
     // continue loop until filterbank index rolls over
     while (_q->b < _q->npfb) {
 
@@ -492,7 +480,7 @@ void SYMSYNC(_step)(SYMSYNC()      _q,
 
             // compute dMF output
             FIRPFB(_execute)(_q->dmf, _q->b, &dmf);
-            
+
             // update internal state
             SYMSYNC(_advance_internal_loop)(_q, mf, dmf);
             _q->tau_decim = _q->tau;    // save return value
@@ -557,7 +545,7 @@ void SYMSYNC(_output_debug_file)(SYMSYNC()    _q,
 {
     FILE * fid = fopen(_filename, "w");
     if (!fid) {
-        fprintf(stderr,"error: symsync_%s_output_debug_file(), could not open '%s' for writing\n", EXTENSION_FULL, _filename);
+        liquid_error(LIQUID_EICONFIG,"symsync_%s_output_debug_file(), could not open '%s' for writing", EXTENSION_FULL, _filename);
         return;
     }
     fprintf(fid,"%% %s, auto-generated file\n\n", DEBUG_SYMSYNC_FILENAME);
@@ -694,5 +682,3 @@ void SYMSYNC(_output_debug_file)(SYMSYNC()    _q,
     fclose(fid);
     printf("symsync: internal results written to '%s'\n", _filename);
 }
-
-

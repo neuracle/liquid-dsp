@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2020 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -63,10 +63,8 @@ FIRFILT() FIRFILT(_create)(TC * _h,
                            unsigned int _n)
 {
     // validate input
-    if (_n == 0) {
-        fprintf(stderr,"error: firfilt_%s_create(), filter length must be greater than zero\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_n == 0)
+        return liquid_error_config("firfilt_%s_create(), filter length must be greater than zero", EXTENSION_FULL);
 
     // create filter object and initialize
     FIRFILT() q = (FIRFILT()) malloc(sizeof(struct FIRFILT(_s)));
@@ -112,10 +110,8 @@ FIRFILT() FIRFILT(_create_kaiser)(unsigned int _n,
                                   float        _mu)
 {
     // validate input
-    if (_n == 0) {
-        fprintf(stderr,"error: firfilt_%s_create_kaiser(), filter length must be greater than zero\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_n == 0)
+        return liquid_error_config("firfilt_%s_create_kaiser(), filter length must be greater than zero", EXTENSION_FULL);
 
     // compute temporary array for holding coefficients
     float hf[_n];
@@ -132,7 +128,7 @@ FIRFILT() FIRFILT(_create_kaiser)(unsigned int _n,
 }
 
 // create from square-root Nyquist prototype
-//  _type   : filter type (e.g. LIQUID_RNYQUIST_RRC)
+//  _type   : filter type (e.g. LIQUID_FIRFILT_RRC)
 //  _k      : nominal samples/symbol, _k > 1
 //  _m      : filter delay [symbols], _m > 0
 //  _beta   : rolloff factor, 0 < beta <= 1
@@ -144,16 +140,12 @@ FIRFILT() FIRFILT(_create_rnyquist)(int          _type,
                                     float        _mu)
 {
     // validate input
-    if (_k < 2) {
-        fprintf(stderr,"error: firfilt_%s_create_rnyquist(), filter samples/symbol must be greater than 1\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_m == 0) {
-        fprintf(stderr,"error: firfilt_%s_create_rnyquist(), filter delay must be greater than 0\n", EXTENSION_FULL);
-        exit(1);
-    } else if (_beta < 0.0f || _beta > 1.0f) {
-        fprintf(stderr,"error: firfilt_%s_create_rnyquist(), filter excess bandwidth factor must be in [0,1]\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_k < 2)
+        return liquid_error_config("firfilt_%s_create_rnyquist(), filter samples/symbol must be greater than 1", EXTENSION_FULL);
+    if (_m == 0)
+        return liquid_error_config("firfilt_%s_create_rnyquist(), filter delay must be greater than 0", EXTENSION_FULL);
+    if (_beta < 0.0f || _beta > 1.0f)
+        return liquid_error_config("firfilt_%s_create_rnyquist(), filter excess bandwidth factor must be in [0,1]", EXTENSION_FULL);
 
     // generate square-root Nyquist filter
     unsigned int h_len = 2*_k*_m + 1;
@@ -170,14 +162,41 @@ FIRFILT() FIRFILT(_create_rnyquist)(int          _type,
     return FIRFILT(_create)(hc, h_len);
 }
 
+// Create object from Parks-McClellan algorithm prototype
+//  _h_len  : filter length, _h_len > 0
+//  _fc     : cutoff frequency, 0 < _fc < 0.5
+//  _As     : stop-band attenuation [dB], _As > 0
+FIRFILT() FIRFILT(_create_firdespm)(unsigned int _h_len,
+                                    float        _fc,
+                                    float        _As)
+{
+    // validate input
+    if (_h_len < 1)
+        return liquid_error_config("firfilt_%s_create_firdespm(), filter samples/symbol must be greater than 1", EXTENSION_FULL);
+    if (_fc < 0.0f || _fc > 0.5f)
+        return liquid_error_config("firfilt_%s_create_firdespm(), filter cutoff frequency must be in (0,0.5]", EXTENSION_FULL);
+
+    // generate square-root Nyquist filter
+    float hf[_h_len];
+    firdespm_lowpass(_h_len,_fc,_As,0,hf);
+
+    // copy coefficients to type-specific array (e.g. float complex)
+    // and scale by filter bandwidth to be consistent with other lowpass prototypes
+    unsigned int i;
+    TC hc[_h_len];
+    for (i=0; i<_h_len; i++)
+        hc[i] = hf[i] * 0.5f / _fc;
+
+    // return filter object and return
+    return FIRFILT(_create)(hc, _h_len);
+}
+
 // create rectangular filter prototype
 FIRFILT() FIRFILT(_create_rect)(unsigned int _n)
 {
     // validate input
-    if (_n == 0 || _n > 1024) {
-        fprintf(stderr,"error: firfilt_%s_create_rect(), filter length must be in [1,1024]\n", EXTENSION_FULL);
-        exit(1);
-    }
+    if (_n == 0 || _n > 1024)
+        return liquid_error_config("firfilt_%s_create_rect(), filter length must be in [1,1024]", EXTENSION_FULL);
 
     // create float array coefficients
     float hf[_n];
@@ -192,6 +211,67 @@ FIRFILT() FIRFILT(_create_rect)(unsigned int _n)
 
     // return filter object and return
     return FIRFILT(_create)(h, _n);
+}
+
+// create DC blocking filter
+FIRFILT() FIRFILT(_create_dc_blocker)(unsigned int _m,
+                                      float        _As)
+{
+    // validate input
+    if (_m < 1 || _m > 1000)
+        return liquid_error_config("firfilt_%s_create_dc_blocker(), filter semi-length (%u) must be in [1,1000]",EXTENSION_FULL, _m);
+    if (_As <= 0.0f)
+        return liquid_error_config("firfilt_%s_create_dc_blocker(), prototype stop-band suppression (%12.4e) must be greater than zero",EXTENSION_FULL, _As);
+
+    // create float array coefficients and design filter
+    unsigned int h_len = 2*_m+1;
+    float        hf[h_len];
+    liquid_firdes_notch(_m, 0, _As, hf);
+
+    // copy coefficients to type-specific array
+    TC h[h_len];
+    unsigned int i;
+    for (i=0; i<h_len; i++)
+        h[i] = (TC) hf[i];
+
+    // return filter object and return
+    return FIRFILT(_create)(h, h_len);
+}
+
+// create notch filter
+FIRFILT() FIRFILT(_create_notch)(unsigned int _m,
+                                 float        _As,
+                                 float        _f0)
+{
+    // validate input
+    if (_m < 1 || _m > 1000)
+        return liquid_error_config("firfilt_%s_create_notch(), filter semi-length (%u) must be in [1,1000]",EXTENSION_FULL, _m);
+    if (_As <= 0.0f)
+        return liquid_error_config("firfilt_%s_create_notch(), prototype stop-band suppression (%12.4e) must be greater than zero",EXTENSION_FULL, _As);
+    if (_f0 < -0.5f || _f0 > 0.5f)
+        return liquid_error_config("firfilt_%s_create_notch(), notch frequency (%e) must be in [-0.5,0.5]",EXTENSION_FULL, _f0);
+
+    // create float array coefficients and design filter
+    unsigned int i;
+    unsigned int h_len = 2*_m+1;    // filter length
+    float        hf[h_len];         // prototype filter with float coefficients
+    TC           h [h_len];         // output filter with type-specific coefficients
+#if TC_COMPLEX
+    // design notch filter as DC blocker, then mix to appropriate frequency
+    liquid_firdes_notch(_m, 0, _As, hf);
+    for (i=0; i<h_len; i++) {
+        float phi = 2.0f * M_PI * _f0 * ((float)i - (float)_m);
+        h[i] = cexpf(_Complex_I*phi) * (TC) hf[i];
+    }
+#else
+    // design notch filter for real-valued coefficients directly
+    liquid_firdes_notch(_m, _f0, _As, hf);
+    for (i=0; i<h_len; i++)
+        h[i] = hf[i];
+#endif
+
+    // return filter object and return
+    return FIRFILT(_create)(h, h_len);
 }
 
 // re-create firfilt object
@@ -229,9 +309,8 @@ FIRFILT() FIRFILT(_recreate)(FIRFILT() _q,
     for (i=_n; i>0; i--)
         _q->h[i-1] = _h[_n-i];
 
-    // re-create dot product object
-    DOTPROD(_destroy)(_q->dp);
-    _q->dp = DOTPROD(_create)(_q->h, _q->h_len);
+    // re-create internal dot product object
+    _q->dp = DOTPROD(_recreate)(_q->dp, _q->h, _q->h_len);
 
     return _q;
 }
@@ -253,7 +332,7 @@ void FIRFILT(_destroy)(FIRFILT() _q)
 void FIRFILT(_reset)(FIRFILT() _q)
 {
 #if LIQUID_FIRFILT_USE_WINDOW
-    WINDOW(_clear)(_q->w);
+    WINDOW(_reset)(_q->w);
 #else
     unsigned int i;
     for (i=0; i<_q->w_len; i++)
@@ -291,6 +370,13 @@ void FIRFILT(_set_scale)(FIRFILT() _q,
     _q->scale = _scale;
 }
 
+// get output scaling for filter
+void FIRFILT(_get_scale)(FIRFILT() _q,
+                         TC *      _scale)
+{
+    *_scale = _q->scale;
+}
+
 // push sample into filter object's internal buffer
 //  _q      :   filter object
 //  _x      :   input sample
@@ -312,6 +398,24 @@ void FIRFILT(_push)(FIRFILT() _q,
 
     // append value to end of buffer
     _q->w[_q->w_index + _q->h_len - 1] = _x;
+#endif
+}
+
+// Write block of samples into filter object's internal buffer
+//  _q      : filter object
+//  _x      : buffer of input samples, [size: _n x 1]
+//  _n      : number of input samples
+void FIRFILT(_write)(FIRFILT()    _q,
+                     TI *         _x,
+                     unsigned int _n)
+{
+#if LIQUID_FIRFILT_USE_WINDOW
+    WINDOW(_write)(_q->w, _x, _n);
+#else
+    // TODO: be smarter about this
+    unsigned int i;
+    for (i=0; i<_n; i++)
+        FIRFILT(_push)(_q, _x[i]);
 #endif
 }
 

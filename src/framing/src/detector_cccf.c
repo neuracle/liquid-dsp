@@ -31,6 +31,7 @@
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+#include <float.h>
 
 #include "liquid.internal.h"
 
@@ -56,8 +57,8 @@ void detector_cccf_estimate_offsets(detector_cccf _q,
                                     float *       _dphi_hat);
 
 // print debugging information
-void detector_cccf_debug_print(detector_cccf _q,
-                               const char *  _filename);
+int detector_cccf_debug_print(detector_cccf _q,
+                              const char *  _filename);
 
 struct detector_cccf_s {
     float complex * s;      // sequence
@@ -111,13 +112,10 @@ detector_cccf detector_cccf_create(float complex * _s,
                                    float           _dphi_max)
 {
     // validate input
-    if (_n == 0) {
-        fprintf(stderr,"error: detector_cccf_create(), sequence length cannot be zero\n");
-        exit(1);
-    } else if (_threshold <= 0.0f) {
-        fprintf(stderr,"error: detector_cccf_create(), threshold must be greater than zero (0.6 recommended)\n");
-        exit(1);
-    }
+    if (_n == 0)
+        return liquid_error_config("detector_cccf_create(), sequence length cannot be zero");
+    if (_threshold <= 0.0f)
+        return liquid_error_config("detector_cccf_create(), threshold must be greater than zero (0.6 recommended)");
     
     // allocate memory for main object
     detector_cccf q = (detector_cccf) malloc(sizeof(struct detector_cccf_s));
@@ -221,8 +219,8 @@ void detector_cccf_print(detector_cccf _q)
 void detector_cccf_reset(detector_cccf _q)
 {
     // reset internal state
-    windowcf_clear(_q->buffer);
-    wdelayf_clear(_q->x2);
+    windowcf_reset(_q->buffer);
+    wdelayf_reset(_q->x2);
 
     // reset internal state
     _q->timer   = _q->n;                // reset timer
@@ -322,8 +320,8 @@ int detector_cccf_correlate(detector_cccf _q,
             return 1;
         }
     } else {
-        fprintf(stderr,"error: detector_cccf_correlate(), unknown/unsupported internal state\n");
-        exit(1);
+        liquid_error(LIQUID_EINT,"detector_cccf_correlate(), unknown/unsupported internal state");
+        return 0;
     }
 
     return 0;
@@ -340,9 +338,12 @@ void detector_cccf_update_sumsq(detector_cccf _q,
     // update estimate of signal magnitude
     float x2_n = crealf(_x * conjf(_x));    // |x[n-1]|^2 (input sample)
     float x2_0;                             // |x[0]  |^2 (oldest sample)
-    wdelayf_read(_q->x2, &x2_0);            // read oldest sample
     wdelayf_push(_q->x2, x2_n);             // push newest sample
+    wdelayf_read(_q->x2, &x2_0);            // read oldest sample
     _q->x2_sum = _q->x2_sum + x2_n - x2_0;  // update sum( |x|^2 ) of last 'n' input samples
+    if (_q->x2_sum < FLT_EPSILON) {
+        _q->x2_sum = FLT_EPSILON;
+    }
 #if 0
     // filtered estimate of E{ |x|^2 }
     _q->x2_hat = 0.8f*_q->x2_hat + 0.2f*_q->x2_sum*_q->n_inv;
@@ -476,15 +477,14 @@ float detector_cccf_estimate_dphi(detector_cccf _q)
 }
 #endif
 
-void detector_cccf_debug_print(detector_cccf _q,
-                               const char *  _filename)
+int detector_cccf_debug_print(detector_cccf _q,
+                              const char *  _filename)
 {
 #if DEBUG_DETECTOR
     FILE * fid = fopen(_filename,"w");
-    if (!fid) {
-        fprintf(stderr,"error: detector_cccf_debug_print(), could not open '%s' for writing\n", _filename);
-        return;
-    }
+    if (!fid)
+        return liquid_error(LIQUID_EIO,"detector_cccf_debug_print(), could not open '%s' for writing", _filename);
+
     fprintf(fid,"%% %s : auto-generated file\n", DEBUG_DETECTOR_FILENAME);
     fprintf(fid,"close all;\n");
     fprintf(fid,"clear all;\n");
@@ -526,6 +526,8 @@ void detector_cccf_debug_print(detector_cccf _q,
     fclose(fid);
     printf("detector_cccf/debug: results written to '%s'\n", _filename);
 #else
-    fprintf(stderr,"detector_cccf_debug_print(): compile-time debugging disabled\n");
+    return liquid_error(LIQUID_EUMODE,"detector_cccf_debug_print(): compile-time debugging disabled\n");
 #endif
+    return LIQUID_OK;
 }
+

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 - 2015 Joseph Gaeddert
+ * Copyright (c) 2007 - 2019 Joseph Gaeddert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -59,8 +59,8 @@ framegen64 framegen64_create()
     // generate pn sequence
     msequence ms = msequence_create(7, 0x0089, 1);
     for (i=0; i<64; i++) {
-        q->pn_sequence[i] = (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2) +
-                            (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2)*_Complex_I;
+        q->pn_sequence[i]  = (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2);
+        q->pn_sequence[i] += (msequence_advance(ms) ? M_SQRT1_2 : -M_SQRT1_2)*_Complex_I;
     }
     msequence_destroy(ms);
 
@@ -86,7 +86,7 @@ framegen64 framegen64_create()
 }
 
 // destroy framegen64 object
-void framegen64_destroy(framegen64 _q)
+int framegen64_destroy(framegen64 _q)
 {
     // destroy internal objects
     qpacketmodem_destroy(_q->enc);
@@ -94,10 +94,11 @@ void framegen64_destroy(framegen64 _q)
 
     // free main object memory
     free(_q);
+    return LIQUID_OK;
 }
 
 // print framegen64 object internals
-void framegen64_print(framegen64 _q)
+int framegen64_print(framegen64 _q)
 {
     float eta = (float) (8*(64 + 8)) / (float) (LIQUID_FRAME64_LEN/2);
     printf("framegen64 [m=%u, beta=%4.2f]:\n", _q->m, _q->beta);
@@ -120,23 +121,26 @@ void framegen64_print(framegen64 _q)
     printf("  summary\n");
     printf("    * total symbols         :   %3u\n", LIQUID_FRAME64_LEN/2);
     printf("    * spectral efficiency   :   %6.4f b/s/Hz\n", eta);
+    return LIQUID_OK;
 }
 
 // execute frame generator (creates a frame)
 //  _q          :   frame generator object
-//  _header     :   8-byte header data
-//  _payload    :   64-byte payload data
+//  _header     :   8-byte header data, NULL for random
+//  _payload    :   64-byte payload data, NULL for random
 //  _frame      :   output frame samples [size: LIQUID_FRAME64_LEN x 1]
-void framegen64_execute(framegen64      _q,
-                        unsigned char * _header,
-                        unsigned char * _payload,
-                        float complex * _frame)
+int framegen64_execute(framegen64      _q,
+                       unsigned char * _header,
+                       unsigned char * _payload,
+                       float complex * _frame)
 {
     unsigned int i;
 
     // concatenate header and payload
-    memmove(&_q->payload_dec[0], _header,   8*sizeof(unsigned char));
-    memmove(&_q->payload_dec[8], _payload, 64*sizeof(unsigned char));
+    for (i=0; i<8; i++)
+        _q->payload_dec[i] = _header==NULL ? rand() & 0xff : _header[i];
+    for (i=0; i<64; i++)
+        _q->payload_dec[i+8] = _payload==NULL ? rand() & 0xff : _payload[i];
 
     // run packet encoder and modulator
     qpacketmodem_encode(_q->enc, _q->payload_dec, _q->payload_sym);
@@ -168,6 +172,7 @@ void framegen64_execute(framegen64      _q,
     }
 
     assert(n==LIQUID_FRAME64_LEN);
+    return LIQUID_OK;
 }
 
 
